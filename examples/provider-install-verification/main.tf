@@ -1,11 +1,14 @@
 terraform {
   required_providers {
-    hashicups = {
-      source = "hashicorp.com/edu/hashicups"
+    ory = {
+      source = "registry.terraform.io/kibblator/ory"
     }
   }
 }
 
-provider "hashicups" {}
+provider "ory" {
+  workspace_api_key = "ory_wak_1234567890"
+  project_id        = "project-guid-here"
+}
 
-data "hashicups_coffees" "example" {}
+data "ory_services" "example" {}

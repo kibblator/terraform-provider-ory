@@ -2,9 +2,10 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 
-	"github.com/hashicorp-demoapp/hashicups-client-go"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -12,66 +13,72 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	openapiclient "github.com/ory/client-go"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ provider.Provider = &hashicupsProvider{}
+	_ provider.Provider = &oryProvider{}
 )
 
 // New is a helper function to simplify provider server and testing implementation.
 func New(version string) func() provider.Provider {
 	return func() provider.Provider {
-		return &hashicupsProvider{
+		return &oryProvider{
 			version: version,
 		}
 	}
 }
 
-// hashicupsProvider is the provider implementation.
-type hashicupsProvider struct {
+// oryProvider is the provider implementation.
+type oryProvider struct {
 	// version is set to the provider version on release, "dev" when the
 	// provider is built and ran locally, and "test" when running acceptance
 	// testing.
 	version string
 }
 
-// hashicupsProviderModel maps provider schema data to a Go type.
-type hashicupsProviderModel struct {
-	Host     types.String `tfsdk:"host"`
-	Username types.String `tfsdk:"username"`
-	Password types.String `tfsdk:"password"`
+// oryProvider maps provider schema data to a Go type.
+type oryProviderModel struct {
+	Host            types.String `tfsdk:"host"`
+	ProjectId       types.String `tfsdk:"project_id"`
+	WorkSpaceApiKey types.String `tfsdk:"workspace_api_key"`
+}
+
+type OryClient struct {
+	APIClient *openapiclient.APIClient
+	Config    string
 }
 
 // Metadata returns the provider type name.
-func (p *hashicupsProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "hashicups"
+func (p *oryProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
+	resp.TypeName = "ory"
 	resp.Version = p.version
 }
 
 // Schema defines the provider-level schema for configuration data.
-func (p *hashicupsProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *oryProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"host": schema.StringAttribute{
 				Optional: true,
 			},
-			"username": schema.StringAttribute{
-				Optional: true,
+			"project_id": schema.StringAttribute{
+				Required: true,
 			},
-			"password": schema.StringAttribute{
-				Optional:  true,
+			"workspace_api_key": schema.StringAttribute{
+				Required:  true,
 				Sensitive: true,
 			},
 		},
 	}
 }
 
-// Configure prepares a HashiCups API client for data sources and resources.
-func (p *hashicupsProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	tflog.Info(ctx, "Configuring HashiCups client")
+// Configure prepares an Ory API client for data sources and resources.
+func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
+	tflog.Info(ctx, "Configuring Ory client")
 	// Retrieve provider data from configuration
-	var config hashicupsProviderModel
+	var config oryProviderModel
 	diags := req.Config.Get(ctx, &config)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -84,27 +91,24 @@ func (p *hashicupsProvider) Configure(ctx context.Context, req provider.Configur
 	if config.Host.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("host"),
-			"Unknown HashiCups API Host",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API host. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the HASHICUPS_HOST environment variable.",
+			"Unknown Ory API Host",
+			"The provider cannot create the Ory API client as there is an unknown configuration value for the Ory API host.",
 		)
 	}
 
-	if config.Username.IsUnknown() {
+	if config.ProjectId.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("username"),
-			"Unknown HashiCups API Username",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API username. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the HASHICUPS_USERNAME environment variable.",
+			path.Root("project_id"),
+			"Unknown Ory API Project Id",
+			"The provider cannot create the Ory API client as there is an unknown configuration value for the Ory API project id.",
 		)
 	}
 
-	if config.Password.IsUnknown() {
+	if config.WorkSpaceApiKey.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("password"),
-			"Unknown HashiCups API Password",
-			"The provider cannot create the HashiCups API client as there is an unknown configuration value for the HashiCups API password. "+
-				"Either target apply the source of the value first, set the value statically in the configuration, or use the HASHICUPS_PASSWORD environment variable.",
+			path.Root("workspace_api_key"),
+			"Unknown Ory API Workspace API Key",
+			"The provider cannot create the Ory API client as there is an unknown configuration value for the Ory API workspace API key.",
 		)
 	}
 
@@ -112,23 +116,19 @@ func (p *hashicupsProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 
-	// Default values to environment variables, but override
-	// with Terraform configuration value if set.
-
-	host := os.Getenv("HASHICUPS_HOST")
-	username := os.Getenv("HASHICUPS_USERNAME")
-	password := os.Getenv("HASHICUPS_PASSWORD")
+	host := "api.console.ory.sh"
+	var project_id, workspace_api_key string
 
 	if !config.Host.IsNull() {
 		host = config.Host.ValueString()
 	}
 
-	if !config.Username.IsNull() {
-		username = config.Username.ValueString()
+	if !config.ProjectId.IsNull() {
+		project_id = config.ProjectId.ValueString()
 	}
 
-	if !config.Password.IsNull() {
-		password = config.Password.ValueString()
+	if !config.WorkSpaceApiKey.IsNull() {
+		workspace_api_key = config.WorkSpaceApiKey.ValueString()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -137,30 +137,27 @@ func (p *hashicupsProvider) Configure(ctx context.Context, req provider.Configur
 	if host == "" {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("host"),
-			"Missing HashiCups API Host",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API host. "+
-				"Set the host value in the configuration or use the HASHICUPS_HOST environment variable. "+
-				"If either is already set, ensure the value is not empty.",
+			"Missing Ory API Host",
+			"The provider cannot create the Ory API client as there is a missing or empty value for the Ory API host. "+
+				"If this is already set, ensure the value is not empty.",
 		)
 	}
 
-	if username == "" {
+	if project_id == "" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("username"),
-			"Missing HashiCups API Username",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API username. "+
-				"Set the username value in the configuration or use the HASHICUPS_USERNAME environment variable. "+
-				"If either is already set, ensure the value is not empty.",
+			path.Root("project_id"),
+			"Missing Ory API Project Id",
+			"The provider cannot create the Ory API client as there is a missing or empty value for the Ory API project id. "+
+				"If this is already set, ensure the value is not empty.",
 		)
 	}
 
-	if password == "" {
+	if workspace_api_key == "" {
 		resp.Diagnostics.AddAttributeError(
-			path.Root("password"),
-			"Missing HashiCups API Password",
-			"The provider cannot create the HashiCups API client as there is a missing or empty value for the HashiCups API password. "+
-				"Set the password value in the configuration or use the HASHICUPS_PASSWORD environment variable. "+
-				"If either is already set, ensure the value is not empty.",
+			path.Root("workspace_api_key"),
+			"Missing Ory API Workspace API Key",
+			"The provider cannot create the Ory API client as there is a missing or empty value for the Ory API workspace API key. "+
+				"If this is already set, ensure the value is not empty.",
 		)
 	}
 
@@ -168,43 +165,64 @@ func (p *hashicupsProvider) Configure(ctx context.Context, req provider.Configur
 		return
 	}
 
-	ctx = tflog.SetField(ctx, "hashicups_host", host)
-	ctx = tflog.SetField(ctx, "hashicups_username", username)
-	ctx = tflog.SetField(ctx, "hashicups_password", password)
-	ctx = tflog.MaskFieldValuesWithFieldKeys(ctx, "hashicups_password")
+	ctx = tflog.SetField(ctx, "ory_host", host)
+	ctx = tflog.SetField(ctx, "ory_project_id", project_id)
+	ctx = tflog.SetField(ctx, "ory_workspace_api_key", workspace_api_key)
+	ctx = tflog.MaskFieldValuesWithFieldKeys(ctx, "ory_workspace_api_key")
 
-	tflog.Debug(ctx, "Creating HashiCups client")
+	tflog.Debug(ctx, "Creating Ory client")
 
-	// Create a new HashiCups client using the configuration values
-	client, err := hashicups.NewClient(&host, &username, &password)
+	// Create a new Ory client using the configuration values and pull configuration
+	configuration := openapiclient.NewConfiguration()
+	configuration.Host = host
+	configuration.AddDefaultHeader("Authorization", "Bearer "+workspace_api_key)
+
+	apiClient := openapiclient.NewAPIClient(configuration)
+	response, r, err := apiClient.ProjectAPI.GetProject(ctx, project_id).Execute()
+
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProject``: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 		resp.Diagnostics.AddError(
-			"Unable to Create HashiCups API Client",
-			"An unexpected error occurred when creating the HashiCups API client. "+
+			"Unable to get project configuration using the Ory API",
+			"An unexpected error occurred when calling GetProject on the Ory API client. "+
 				"If the error is not clear, please contact the provider developers.\n\n"+
-				"HashiCups Client Error: "+err.Error(),
+				"Ory Client Error: "+err.Error(),
 		)
 		return
 	}
 
-	// Make the HashiCups client available during DataSource and Resource
+	configFile, err := json.Marshal(response)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to marshal project configuration",
+			"An unexpected error occurred when marshaling the project configuration to JSON.\n\n"+
+				"Error: "+err.Error(),
+		)
+		return
+	}
+
+	client := &OryClient{
+		APIClient: apiClient,
+		Config:    string(configFile),
+	}
+
+	// Make the Ory config available during DataSource and Resource
 	// type Configure methods.
 	resp.DataSourceData = client
 	resp.ResourceData = client
 
-	tflog.Info(ctx, "Configured HashiCups client", map[string]any{"success": true})
+	tflog.Info(ctx, "Configured Ory client", map[string]any{"success": true})
 }
 
 // DataSources defines the data sources implemented in the provider.
-func (p *hashicupsProvider) DataSources(_ context.Context) []func() datasource.DataSource {
+func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return []func() datasource.DataSource{
-		NewCoffeesDataSource,
+		NewServicesDataSource,
 	}
 }
 
 // Resources defines the resources implemented in the provider.
-func (p *hashicupsProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{
-		NewOrderResource,
-	}
+func (p *oryProvider) Resources(_ context.Context) []func() resource.Resource {
+	return []func() resource.Resource{}
 }
