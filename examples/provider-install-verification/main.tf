@@ -7,8 +7,6 @@ terraform {
 }
 
 provider "ory" {
-  workspace_api_key = "ory_wak_1234567890"
-  project_id        = "project-guid-here"
 }
 
 data "ory_services" "example" {}

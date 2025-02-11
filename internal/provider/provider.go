@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -47,7 +46,8 @@ type oryProviderModel struct {
 
 type OryClient struct {
 	APIClient *openapiclient.APIClient
-	Config    string
+	Config    *openapiclient.Project
+	ProjectID string
 }
 
 // Metadata returns the provider type name.
@@ -64,10 +64,10 @@ func (p *oryProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 				Optional: true,
 			},
 			"project_id": schema.StringAttribute{
-				Required: true,
+				Optional: true,
 			},
 			"workspace_api_key": schema.StringAttribute{
-				Required:  true,
+				Optional:  true,
 				Sensitive: true,
 			},
 		},
@@ -116,8 +116,15 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		return
 	}
 
-	host := "api.console.ory.sh"
-	var project_id, workspace_api_key string
+	host := os.Getenv("ORY_HOST")
+	project_id := os.Getenv("ORY_PROJECT_ID")
+	workspace_api_key := os.Getenv("ORY_WORKSPACE_API_KEY")
+
+	tflog.Debug(ctx, "Checking environment variables for Ory configuration", map[string]interface{}{
+		"ory_host":              host,
+		"ory_project_id":        project_id,
+		"ory_workspace_api_key": workspace_api_key,
+	})
 
 	if !config.Host.IsNull() {
 		host = config.Host.ValueString()
@@ -135,12 +142,7 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	// errors with provider-specific guidance.
 
 	if host == "" {
-		resp.Diagnostics.AddAttributeError(
-			path.Root("host"),
-			"Missing Ory API Host",
-			"The provider cannot create the Ory API client as there is a missing or empty value for the Ory API host. "+
-				"If this is already set, ensure the value is not empty.",
-		)
+		host = "api.console.ory.sh"
 	}
 
 	if project_id == "" {
@@ -192,19 +194,10 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		return
 	}
 
-	configFile, err := json.Marshal(response)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to marshal project configuration",
-			"An unexpected error occurred when marshaling the project configuration to JSON.\n\n"+
-				"Error: "+err.Error(),
-		)
-		return
-	}
-
 	client := &OryClient{
 		APIClient: apiClient,
-		Config:    string(configFile),
+		Config:    response,
+		ProjectID: project_id,
 	}
 
 	// Make the Ory config available during DataSource and Resource
@@ -224,5 +217,7 @@ func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSou
 
 // Resources defines the resources implemented in the provider.
 func (p *oryProvider) Resources(_ context.Context) []func() resource.Resource {
-	return []func() resource.Resource{}
+	return []func() resource.Resource{
+		NewRegistrationResource,
+	}
 }
