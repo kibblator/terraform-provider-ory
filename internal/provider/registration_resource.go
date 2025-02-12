@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"terraform-provider-ory/internal/provider/helpers"
@@ -164,7 +165,7 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(hooks, "session") == -1 {
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
 				Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
@@ -401,7 +402,7 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(hooks, "session") == -1 {
 			// Add the "session" hook if it doesn't exist
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
@@ -433,11 +434,17 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 
 	//get latest revision
 	project, _, _ := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
-	projectUpdate, response, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, project.RevisionId).JsonPatch(patch).Execute()
 
-	tflog.Debug(ctx, "Response", map[string]interface{}{
-		"response": response,
-	})
+	patchJSON, err := json.Marshal(patch)
+	if err != nil {
+		resp.Diagnostics.AddError("JSON Marshal Error", "Failed to marshal patch to JSON: "+err.Error())
+		return
+	}
+
+	// Log the JSON payload
+	tflog.Debug(ctx, "Patch JSON Payload", map[string]interface{}{"payload": string(patchJSON)})
+
+	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, project.RevisionId).JsonPatch(patch).Execute()
 
 	if err != nil {
 		resp.Diagnostics.AddError(

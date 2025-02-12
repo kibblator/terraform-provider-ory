@@ -29,5 +29,12 @@ func ConvertToHooks(hooksRaw interface{}) ([]orytypes.Hook, diag.Diagnostics) {
 		return nil, diags
 	}
 
+	for _, hook := range hooks {
+		if hook.Hook == "" && hook.Config == nil {
+			diags.AddError("Invalid Hook Shape", "Hook object is missing the 'hook' or 'config' field")
+			return nil, diags
+		}
+	}
+
 	return hooks, diags
 }

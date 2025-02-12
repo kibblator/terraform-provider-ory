@@ -11,10 +11,10 @@ provider "ory" {
 }
 
 resource "ory_registration" "reg_settings" {
-  enable_registration    = true
-  enable_login_hints     = true
+  enable_registration    = false
+  enable_login_hints     = false
   enable_post_signin_reg = false
-  enable_password_auth   = true
+  enable_password_auth   = false
 }
 
 
