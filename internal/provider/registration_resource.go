@@ -9,6 +9,7 @@ import (
 	orytypes "terraform-provider-ory/internal/provider/types"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
@@ -20,8 +21,9 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource              = &registrationResource{}
-	_ resource.ResourceWithConfigure = &registrationResource{}
+	_ resource.Resource                = &registrationResource{}
+	_ resource.ResourceWithConfigure   = &registrationResource{}
+	_ resource.ResourceWithImportState = &registrationResource{}
 )
 
 // NewRegistrationResource is a helper function to simplify the provider implementation.
@@ -518,4 +520,9 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 
 // Delete deletes the resource and removes the Terraform state on success.
 func (r *registrationResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+}
+
+func (r *registrationResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
+	// Retrieve import ID and save to id attribute
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 }
