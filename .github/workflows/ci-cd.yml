@@ -40,9 +40,10 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.0
+          terraform_wrapper: false
 
       - name: Initialize Terraform Provider
         run: terraform init
