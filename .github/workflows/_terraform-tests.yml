@@ -1,20 +1,16 @@
-name: Deploy Terraform Provider
+name: Terraform Acceptance Tests
 
 on:
   workflow_dispatch:
-  push:
-    paths-ignore:
-      - "**.md"
-    branches:
-      - main
 
 jobs:
-  unit-tests:
-    name: Run Unit Tests
+  acceptance-tests:
+    name: Run Acceptance Tests
     runs-on: ubuntu-latest
 
     env:
       GO111MODULE: on
+      TF_ACC: 1
       ORY_WORKSPACE_API_KEY: ${{ secrets.ORY_WORKSPACE_API_KEY }}
       ORY_PROJECT_ID: ${{ secrets.ORY_PROJECT_ID }}
 
@@ -37,12 +33,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run Go Unit Tests
-        run: go test -short -v ./...
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.5.0
+          terraform_wrapper: false
 
-  trigger-acceptance-tests:
-    if: github.actor != 'dependabot[bot]'
-    name: Trigger Acceptance Tests
-    needs: unit-tests
-    uses: ./.github/workflows/_terraform-tests.yml
-    secrets: inherit
+      - name: Initialize Terraform Provider
+        run: terraform init
+
+      - name: Run Acceptance Tests
+        run: go test -v ./... -run TestAcc
