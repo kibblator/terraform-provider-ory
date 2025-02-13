@@ -1,9 +1,9 @@
 <div align="center">
   <h1>Ory Terraform Provider</h1>
 
-[![Release](https://img.shields.io/github/v/release/kibblator/ory-terraform-provider?logo=terraform&include_prereleases)](https://github.com/kibblator/ory-terraform-provider/releases)
-[![License](https://img.shields.io/github/license/kibblator/ory-terraform-provider.svg)](https://github.com/kibblator/ory-terraform-provider/blob/main/LICENSE)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/kibblator/ory-terraform-provider/ci-cd.yml?branch=main)](https://github.com/kibblator/ory-terraform-provider/actions?query=branch%3Amain)
+[![Release](https://img.shields.io/github/v/release/kibblator/terraform-provider-ory?logo=terraform&include_prereleases)](https://github.com/kibblator/terraform-provider-ory/releases)
+[![License](https://img.shields.io/github/license/kibblator/terraform-provider-ory.svg)](https://github.com/kibblator/terraform-provider-ory/blob/main/LICENSE)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/kibblator/terraform-provider-ory/ci-cd.yml?branch=main)](https://github.com/kibblator/terraform-provider-ory/actions?query=branch%3Amain)
 
 </div>
 
