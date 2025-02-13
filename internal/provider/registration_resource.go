@@ -78,29 +78,35 @@ func (r *registrationResource) Schema(_ context.Context, _ resource.SchemaReques
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed: true,
+				Description: "String identifier of the registration resource.",
+				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"last_updated": schema.StringAttribute{
-				Computed: true,
+				Description: "Timestamp of the last Terraform update of the registration settings.",
+				Computed:    true,
 			},
 			"enable_registration": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
+				Description: "If enabled, users can sign up using the selfservice UIs.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"enable_password_auth": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
+				Description: "If enabled, users will be able to sign in and register using a password.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"enable_post_signin_reg": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
+				Description: "If enabled, users will be automatically logged in after they register.",
+				Optional:    true,
+				Computed:    true,
 			},
 			"enable_login_hints": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
+				Description: "Login hints provide additional information to users when they try to sign up with an account, that already exists",
+				Optional:    true,
+				Computed:    true,
 			},
 		},
 	}

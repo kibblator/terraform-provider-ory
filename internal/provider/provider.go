@@ -61,14 +61,17 @@ func (p *oryProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
 			"host": schema.StringAttribute{
-				Optional: true,
+				Description: "URI for the Ory Network console API. May also be provided with the ORY_HOST environment variable.",
+				Optional:    true,
 			},
 			"project_id": schema.StringAttribute{
-				Optional: true,
+				Description: "The project ID for the target Ory Network Project. May also be provided with the ORY_PROJECT_ID environment variable.",
+				Optional:    true,
 			},
 			"workspace_api_key": schema.StringAttribute{
-				Optional:  true,
-				Sensitive: true,
+				Description: "Your Ory Network workspace API key. May also be provided with the ORY_WORKSPACE_API_KEY environment variable.",
+				Optional:    true,
+				Sensitive:   true,
 			},
 		},
 	}
@@ -210,9 +213,7 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 
 // DataSources defines the data sources implemented in the provider.
 func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{
-		NewServicesDataSource,
-	}
+	return []func() datasource.DataSource{}
 }
 
 // Resources defines the resources implemented in the provider.
