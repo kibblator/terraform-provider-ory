@@ -1,4 +1,4 @@
-# Manage example registration settings
+# Example registration settings
 resource "ory_registration" "example" {
   enable_registration    = true
   enable_login_hints     = false
