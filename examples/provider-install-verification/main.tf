@@ -9,4 +9,4 @@ terraform {
 provider "ory" {
 }
 
-data "ory_services" "example" {}
+resource "ory_registration" "example" {}
