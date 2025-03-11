@@ -1,13 +1,14 @@
-package provider
+package resources
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"terraform-provider-ory/internal/provider/helpers"
-	orytypes "terraform-provider-ory/internal/provider/types"
 	"time"
+
+	"github.com/kibblator/terraform-provider-ory/internal/provider/helpers"
+	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -33,7 +34,7 @@ func NewRegistrationResource() resource.Resource {
 
 // registrationResource is the resource implementation.
 type registrationResource struct {
-	oryClient *OryClient
+	oryClient *orytypes.OryClient
 }
 
 // registrationResourceModel maps the resource schema data.
@@ -54,7 +55,7 @@ func (r *registrationResource) Configure(_ context.Context, req resource.Configu
 		return
 	}
 
-	client, ok := req.ProviderData.(*OryClient)
+	client, ok := req.ProviderData.(*orytypes.OryClient)
 
 	if !ok {
 		resp.Diagnostics.AddError(

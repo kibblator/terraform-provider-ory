@@ -12,6 +12,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/kibblator/terraform-provider-ory/internal/provider/resources"
+	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
+
 	openapiclient "github.com/ory/client-go"
 )
 
@@ -42,12 +45,6 @@ type oryProviderModel struct {
 	Host            types.String `tfsdk:"host"`
 	ProjectId       types.String `tfsdk:"project_id"`
 	WorkSpaceApiKey types.String `tfsdk:"workspace_api_key"`
-}
-
-type OryClient struct {
-	APIClient *openapiclient.APIClient
-	Config    *openapiclient.Project
-	ProjectID string
 }
 
 // Metadata returns the provider type name.
@@ -197,7 +194,7 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		return
 	}
 
-	client := &OryClient{
+	client := &orytypes.OryClient{
 		APIClient: apiClient,
 		Config:    response,
 		ProjectID: project_id,
@@ -219,6 +216,6 @@ func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSou
 // Resources defines the resources implemented in the provider.
 func (p *oryProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewRegistrationResource,
+		resources.NewRegistrationResource,
 	}
 }

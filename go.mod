@@ -1,4 +1,4 @@
-module terraform-provider-ory
+module github.com/kibblator/terraform-provider-ory
 
 go 1.22.7
 

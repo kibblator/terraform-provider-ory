@@ -3,7 +3,7 @@ package helpers
 import (
 	"encoding/json"
 
-	orytypes "terraform-provider-ory/internal/provider/types"
+	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 )

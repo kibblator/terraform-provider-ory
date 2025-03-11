@@ -1,18 +1,20 @@
-package provider
+package resources_test
 
 import (
 	"testing"
+
+	"github.com/kibblator/terraform-provider-ory/internal/provider/acctest"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 )
 
 func TestAccOryRegistrationResource(t *testing.T) {
 	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
 		Steps: []resource.TestStep{
 			// Create and Read testing
 			{
-				Config: providerConfig + `
+				Config: acctest.ProviderConfig + `
 resource "ory_registration" "test" {
   enable_registration    = false
   enable_login_hints     = true
@@ -40,7 +42,7 @@ resource "ory_registration" "test" {
 			},
 			// Update and Read testing
 			{
-				Config: providerConfig + `
+				Config: acctest.ProviderConfig + `
 resource "ory_registration" "test" {
   enable_registration    = true
   enable_login_hints     = false

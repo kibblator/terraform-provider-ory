@@ -1,8 +1,9 @@
 package helpers
 
 import (
-	orytypes "terraform-provider-ory/internal/provider/types"
 	"testing"
+
+	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	"github.com/stretchr/testify/assert"
 )
