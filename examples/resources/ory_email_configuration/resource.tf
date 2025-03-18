@@ -7,7 +7,7 @@ resource "ory_email_configuration" "example" {
 resource "ory_email_configuration" "example" {
   server_type = "smtp"
 
-  smtp_config {
+  smtp_config = {
     sender_name    = "Ory"
     sender_address = "noreply@examplecompany.com"
     host           = "smtp.examplecompany.com"
@@ -33,7 +33,7 @@ resource "ory_email_configuration" "example" {
 resource "ory_email_configuration" "example" {
   server_type = "http"
 
-  http_config {
+  http_config = {
     url                 = "https://ory.sh"
     request_method      = "POST"                                     # Can be GET, POST, PUT, PATCH
     authentication_type = "none"                                     # Can be none, basic, apikey
