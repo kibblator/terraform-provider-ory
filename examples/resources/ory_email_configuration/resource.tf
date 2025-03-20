@@ -1,10 +1,10 @@
 # Email configuration using default server type
-resource "ory_email_configuration" "example" {
+resource "ory_email_configuration" "default" {
   server_type = "default"
 }
 
 # Email configuration using smtp server type
-resource "ory_email_configuration" "example" {
+resource "ory_email_configuration" "smtp" {
   server_type = "smtp"
 
   smtp_config = {
@@ -30,7 +30,7 @@ resource "ory_email_configuration" "example" {
 }
 
 # Email configuration using http server type
-resource "ory_email_configuration" "example" {
+resource "ory_email_configuration" "http" {
   server_type = "http"
 
   http_config = {

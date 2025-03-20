@@ -217,5 +217,6 @@ func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSou
 func (p *oryProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		resources.NewRegistrationResource,
+		resources.NewEmailConfigurationResource,
 	}
 }
