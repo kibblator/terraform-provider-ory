@@ -10,7 +10,7 @@ type Hook struct {
 }
 
 type OryClient struct {
-	APIClient *openapiclient.APIClient
-	Config    *openapiclient.Project
-	ProjectID string
+	APIClient     *openapiclient.APIClient
+	ProjectConfig *openapiclient.Project
+	ProjectID     string
 }

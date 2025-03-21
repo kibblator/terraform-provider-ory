@@ -2,7 +2,6 @@ package resources
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -159,7 +158,7 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		})
 	}
 
-	hooksRaw := helpers.GetNested(ctx, r.oryClient.Config.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
+	hooksRaw := helpers.GetNested(ctx, r.oryClient.ProjectConfig.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
 	hooks, diags := helpers.ConvertToHooks(hooksRaw)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
@@ -198,7 +197,7 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		"patch": patch,
 	})
 
-	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.Config.RevisionId).JsonPatch(patch).Execute()
+	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -395,7 +394,7 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		"patch": patch,
 	})
 
-	hooksRaw := helpers.GetNested(ctx, r.oryClient.Config.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
+	hooksRaw := helpers.GetNested(ctx, r.oryClient.ProjectConfig.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
 	hooks, diags := helpers.ConvertToHooks(hooksRaw)
 	if diags.HasError() {
 		resp.Diagnostics.Append(diags...)
@@ -443,16 +442,6 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 
 	//get latest revision
 	project, _, _ := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
-
-	patchJSON, err := json.Marshal(patch)
-	if err != nil {
-		resp.Diagnostics.AddError("JSON Marshal Error", "Failed to marshal patch to JSON: "+err.Error())
-		return
-	}
-
-	// Log the JSON payload
-	tflog.Debug(ctx, "Patch JSON Payload", map[string]interface{}{"payload": string(patchJSON)})
-
 	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, project.RevisionId).JsonPatch(patch).Execute()
 
 	if err != nil {
@@ -466,11 +455,6 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 	// After successful patch, extract updated values from projectUpdate
 	enableRegistration, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config,
 		"selfservice", "flows", "registration", "enabled").(bool)
-
-	//log enable registration
-	tflog.Debug(ctx, "Enable Registration", map[string]interface{}{
-		"enable_registration": enableRegistration,
-	})
 
 	if !ok {
 		resp.Diagnostics.AddError(

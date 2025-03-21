@@ -195,9 +195,9 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	}
 
 	client := &orytypes.OryClient{
-		APIClient: apiClient,
-		Config:    response,
-		ProjectID: project_id,
+		APIClient:     apiClient,
+		ProjectConfig: response,
+		ProjectID:     project_id,
 	}
 
 	// Make the Ory config available during DataSource and Resource
