@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -16,6 +17,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/custom_validators"
+
 	"github.com/kibblator/terraform-provider-ory/internal/provider/helpers"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 	"github.com/ory/client-go"
@@ -125,6 +127,9 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 			"server_type": schema.StringAttribute{
 				Description: "The type of the email server.",
 				Required:    true,
+				Validators: []validator.String{
+					stringvalidator.OneOf("smtp", "http", "default"),
+				},
 			},
 			"smtp_config": schema.SingleNestedAttribute{
 				Description: "SMTP configuration block (optional, but fields required if present).",
@@ -154,6 +159,9 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 						Description: "The security type of the SMTP server.",
 						Optional:    true,
 						Computed:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOf("starttls", "starttls_notrust", "cleartext", "implicittls", "implicittls_notrust"),
+						},
 					},
 					"username": schema.StringAttribute{
 						Description: "The username for the SMTP server.",
@@ -181,11 +189,17 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 						Description: "The request method for the HTTP server.",
 						Optional:    true,
 						Computed:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOf("GET", "POST", "PUT", "PATCH"),
+						},
 					},
 					"authentication_type": schema.StringAttribute{
 						Description: "The authentication type for the HTTP server.",
 						Optional:    true,
 						Computed:    true,
+						Validators: []validator.String{
+							stringvalidator.OneOf("none", "basic_auth", "api_key"),
+						},
 					},
 					"api_key": schema.SingleNestedAttribute{
 						Description: "The API key for the HTTP server.",
@@ -194,6 +208,9 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 							"transport_mode": schema.StringAttribute{
 								Description: "The transport mode for the HTTP server.",
 								Required:    true,
+								Validators: []validator.String{
+									stringvalidator.OneOf("header", "cookie"),
+								},
 							},
 							"name": schema.StringAttribute{
 								Description: "The name of the API Key.",
