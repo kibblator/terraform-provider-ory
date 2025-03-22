@@ -23,10 +23,10 @@ type Courier struct {
 }
 
 type SMTP struct {
-	ConnectionUri string `json:"connection_uri,omitempty"`
-	FromAddress   string `json:"from_address,omitempty"`
-	FromName      string `json:"from_name,omitempty"`
-	Headers       string `json:"headers,omitempty"`
+	ConnectionUri string            `json:"connection_uri,omitempty"`
+	FromAddress   string            `json:"from_address,omitempty"`
+	FromName      string            `json:"from_name,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
 }
 
 type HTTP struct {
@@ -34,11 +34,11 @@ type HTTP struct {
 }
 
 type HttpRequestConfig struct {
-	HttpAuth *HttpAuth `json:"auth,omitempty"`
-	Body     string    `json:"body,omitempty"`
-	Headers  string    `json:"headers,omitempty"`
-	Method   string    `json:"method,omitempty"`
-	Url      string    `json:"url,omitempty"`
+	HttpAuth *HttpAuth         `json:"auth,omitempty"`
+	Body     string            `json:"body,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	Method   string            `json:"method,omitempty"`
+	Url      string            `json:"url,omitempty"`
 }
 
 type HttpAuth struct {

@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
@@ -332,7 +333,7 @@ func (r emailConfigurationResource) ValidateConfig(ctx context.Context, req reso
 			}
 		}
 
-		if data.HTTPConfig.AuthenticationType.ValueString() == "basic" {
+		if data.HTTPConfig.AuthenticationType.ValueString() == "basic_auth" {
 			if data.HTTPConfig.ApiKey != nil {
 				resp.Diagnostics.AddError("api_key not allowed", "cannot specify api_key block when authentication_type is 'basic'")
 			}
@@ -389,6 +390,12 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 		}
 	}
 
+	headersMap := make(map[string]string)
+
+	for _, header := range *plan.SMTPHeaders {
+		headersMap[header.Key.ValueString()] = header.Value.ValueString()
+	}
+
 	if plan.ServerType.ValueString() == "smtp" {
 		if oryConfig.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
@@ -408,6 +415,7 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 				plan.SMTPConfig.Host.ValueString(), plan.SMTPConfig.Port.ValueString(), plan.SMTPConfig.Security.ValueString()),
 			FromAddress: plan.SMTPConfig.SenderAddress.ValueString(),
 			FromName:    plan.SMTPConfig.SenderName.ValueString(),
+			Headers:     headersMap,
 		}
 
 		patch = append(patch, client.JsonPatch{
@@ -432,7 +440,7 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 		})
 
 		var httpConfig orytypes.HTTP
-		createHttpConfigRequest(plan.HTTPConfig, &httpConfig)
+		createHttpConfigRequest(plan.HTTPConfig, headersMap, &httpConfig)
 
 		patch = append(patch, client.JsonPatch{
 			Op:    "replace",
@@ -479,7 +487,7 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	}
 }
 
-func createHttpConfigRequest(planHttpConfig *HTTPConfig, http *orytypes.HTTP) {
+func createHttpConfigRequest(planHttpConfig *HTTPConfig, smtpHeaders map[string]string, http *orytypes.HTTP) {
 	authenticationType := planHttpConfig.AuthenticationType.ValueString()
 
 	http.HttpRequestConfig = &orytypes.HttpRequestConfig{}
@@ -497,7 +505,7 @@ func createHttpConfigRequest(planHttpConfig *HTTPConfig, http *orytypes.HTTP) {
 			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.Value = planHttpConfig.ApiKey.Value.ValueString()
 		}
 
-		if authenticationType == "basic" {
+		if authenticationType == "basic_auth" {
 			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.User = planHttpConfig.BasicAuth.Username.ValueString()
 			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.Password = planHttpConfig.BasicAuth.Password.ValueString()
 		}
@@ -506,6 +514,7 @@ func createHttpConfigRequest(planHttpConfig *HTTPConfig, http *orytypes.HTTP) {
 	http.HttpRequestConfig.Body = "base64://" + planHttpConfig.ActionBody.ValueString()
 	http.HttpRequestConfig.Method = planHttpConfig.RequestMethod.ValueString()
 	http.HttpRequestConfig.Url = planHttpConfig.Url.ValueString()
+	http.HttpRequestConfig.Headers = smtpHeaders
 }
 
 // Read implements resource.Resource.
@@ -563,6 +572,19 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 			Username:      helpers.StringOrNil(argUsername),
 			Password:      helpers.StringOrNil(argPassword),
 		}
+
+		if projectConfig.Courier.SMTP.Headers != nil {
+			headers := []SMTPHeader{}
+
+			for key, value := range projectConfig.Courier.SMTP.Headers {
+				headers = append(headers, SMTPHeader{
+					Key:   types.StringValue(key),
+					Value: types.StringValue(value),
+				})
+			}
+
+			state.SMTPHeaders = &headers
+		}
 	}
 
 	if serverType == "http" {
@@ -578,15 +600,48 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 			Url:                helpers.StringOrNil(projectConfig.Courier.HTTP.HttpRequestConfig.Url),
 			RequestMethod:      helpers.StringOrNil(projectConfig.Courier.HTTP.HttpRequestConfig.Method),
 			AuthenticationType: helpers.StringOrNil(httpAuthType),
-			BasicAuth: &BasicAuth{
+			ActionBody:         helpers.StringOrNil(projectConfig.Courier.HTTP.HttpRequestConfig.Body),
+		}
+
+		if username != "" && password != "" {
+			state.HTTPConfig.BasicAuth = &BasicAuth{
 				Username: helpers.StringOrNil(username),
 				Password: helpers.StringOrNil(password),
-			},
-			ApiKey: &APIKey{
+			}
+		}
+
+		if in != "" && name != "" && value != "" {
+			state.HTTPConfig.ApiKey = &APIKey{
 				TransportMode: helpers.StringOrNil(in),
 				Name:          helpers.StringOrNil(name),
 				Value:         helpers.StringOrNil(value),
-			},
+			}
+		}
+
+		if projectConfig.Courier.HTTP.HttpRequestConfig.Headers != nil {
+			headers := []SMTPHeader{}
+
+			for key, value := range projectConfig.Courier.HTTP.HttpRequestConfig.Headers {
+				headers = append(headers, SMTPHeader{
+					Key:   types.StringValue(key),
+					Value: types.StringValue(value),
+				})
+			}
+
+			state.SMTPHeaders = &headers
+		}
+
+		if projectConfig.Courier.SMTP.Headers != nil {
+			headers := []SMTPHeader{}
+
+			for key, value := range projectConfig.Courier.SMTP.Headers {
+				headers = append(headers, SMTPHeader{
+					Key:   types.StringValue(key),
+					Value: types.StringValue(value),
+				})
+			}
+
+			state.SMTPHeaders = &headers
 		}
 	}
 
@@ -607,7 +662,7 @@ func parseHTTPAuthParams(hhttpAuthType string, httpAuthConfig *orytypes.HttpAuth
 		return "", "", httpAuthConfig.In, httpAuthConfig.Name, httpAuthConfig.Value
 	}
 
-	if hhttpAuthType == "basic" {
+	if hhttpAuthType == "basic_auth" {
 		return httpAuthConfig.User, httpAuthConfig.Password, "", "", ""
 	}
 
@@ -639,8 +694,28 @@ func parseSMTPURL(smtpURL string) (username, password, host, port, security stri
 
 	// Check for security parameter
 	queryParams := parsedURL.Query()
-	if secType, exists := queryParams["security"]; exists && len(secType) > 0 {
-		security = secType[0]
+	param := ""
+
+	for key, values := range queryParams {
+		param = fmt.Sprintf("%s=%s", key, values[0])
+		break
+	}
+
+	switch param {
+	case "skip_ssl_verify=true":
+		if parsedURL.Scheme == "smtps" {
+			security = "implicittls_notrust"
+		} else {
+			security = "starttls_notrust"
+		}
+	case "disable_starttls=true":
+		security = "cleartext"
+	case "":
+		if parsedURL.Scheme == "smtps" {
+			security = "implicittls"
+		} else {
+			security = "starttls"
+		}
 	}
 
 	return username, password, host, port, security, nil
@@ -654,10 +729,31 @@ func buildSMTPURL(username, password, host string, port string, securityType str
 	escapedUsername := url.QueryEscape(username)
 	escapedPassword := url.QueryEscape(password)
 
-	smtpURI := fmt.Sprintf("smtp://%s:%s@%s:%s", escapedUsername, escapedPassword, host, port)
+	scheme := "smtp"
+	query := ""
 
-	if securityType != "" {
-		smtpURI += "?" + securityType
+	switch securityType {
+	case "starttls":
+		scheme = "smtp"
+		query = ""
+	case "starttls_notrust":
+		scheme = "smtp"
+		query = "skip_ssl_verify=true"
+	case "cleartext":
+		scheme = "smtp"
+		query = "disable_starttls=true"
+	case "implicittls":
+		scheme = "smtps"
+		query = ""
+	case "implicittls_notrust":
+		scheme = "smtps"
+		query = "skip_ssl_verify=true"
+	}
+
+	smtpURI := fmt.Sprintf("%s://%s:%s@%s:%s", scheme, escapedUsername, escapedPassword, host, port)
+
+	if query != "" {
+		smtpURI = fmt.Sprintf("%s?%s", smtpURI, query)
 	}
 
 	return smtpURI
@@ -699,6 +795,14 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 		}
 	}
 
+	headersMap := make(map[string]string)
+
+	if plan.SMTPHeaders != nil {
+		for _, header := range *plan.SMTPHeaders {
+			headersMap[header.Key.ValueString()] = header.Value.ValueString()
+		}
+	}
+
 	if plan.ServerType.ValueString() == "smtp" {
 		if oryConfig.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
@@ -718,6 +822,7 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 				plan.SMTPConfig.Host.ValueString(), plan.SMTPConfig.Port.ValueString(), plan.SMTPConfig.Security.ValueString()),
 			FromAddress: plan.SMTPConfig.SenderAddress.ValueString(),
 			FromName:    plan.SMTPConfig.SenderName.ValueString(),
+			Headers:     headersMap,
 		}
 
 		patch = append(patch, client.JsonPatch{
@@ -742,13 +847,21 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 		})
 
 		var httpConfig orytypes.HTTP
-		createHttpConfigRequest(plan.HTTPConfig, &httpConfig)
+		createHttpConfigRequest(plan.HTTPConfig, headersMap, &httpConfig)
 
 		patch = append(patch, client.JsonPatch{
 			Op:    "replace",
 			Path:  "/services/identity/config/courier/http",
 			Value: httpConfig,
 		})
+
+		jsonPatch, err := json.Marshal(httpConfig)
+
+		if err != nil {
+			resp.Diagnostics.AddError("couldn't get json", "error marshalling json for patch")
+		}
+
+		resp.Diagnostics.AddWarning("JSON patch", string(jsonPatch))
 	}
 
 	_, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
