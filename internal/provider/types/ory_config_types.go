@@ -30,7 +30,28 @@ type SMTP struct {
 }
 
 type HTTP struct {
-	FromName string `json:"from_name,omitempty"`
+	HttpRequestConfig *HttpRequestConfig `json:"request_config,omitempty"`
+}
+
+type HttpRequestConfig struct {
+	HttpAuth *HttpAuth `json:"auth,omitempty"`
+	Body     string    `json:"body,omitempty"`
+	Headers  string    `json:"headers,omitempty"`
+	Method   string    `json:"method,omitempty"`
+	Url      string    `json:"url,omitempty"`
+}
+
+type HttpAuth struct {
+	HttpAuthConfig *HttpAuthConfig `json:"config,omitempty"`
+	Type           string          `json:"type,omitempty"`
+}
+
+type HttpAuthConfig struct {
+	Password string `json:"password,omitempty"`
+	User     string `json:"user,omitempty"`
+	In       string `json:"in,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Value    string `json:"value,omitempty"`
 }
 
 type Templates struct {

@@ -11,8 +11,10 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/kibblator/terraform-provider-ory/internal/provider/custom_validators"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/helpers"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 	"github.com/ory/client-go"
@@ -43,11 +45,20 @@ type HTTPConfig struct {
 	Url                types.String `tfsdk:"url"`
 	RequestMethod      types.String `tfsdk:"request_method"`
 	AuthenticationType types.String `tfsdk:"authentication_type"`
-	Username           types.String `tfsdk:"username"`
-	Password           types.String `tfsdk:"password"`
-	ApiKey             types.String `tfsdk:"api_key"`
-	TransportMode      types.String `tfsdk:"transport_mode"`
+	BasicAuth          *BasicAuth   `tfsdk:"basic_auth"`
+	ApiKey             *APIKey      `tfsdk:"api_key"`
 	ActionBody         types.String `tfsdk:"action_body"`
+}
+
+type APIKey struct {
+	TransportMode types.String `tfsdk:"transport_mode"`
+	Name          types.String `tfsdk:"name"`
+	Value         types.String `tfsdk:"value"`
+}
+
+type BasicAuth struct {
+	Username types.String `tfsdk:"username"`
+	Password types.String `tfsdk:"password"`
 }
 
 type SMTPHeader struct {
@@ -175,32 +186,45 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 						Optional:    true,
 						Computed:    true,
 					},
-					"username": schema.StringAttribute{
-						Description: "The username for the HTTP server.",
-						Optional:    true,
-						Computed:    true,
-					},
-					"password": schema.StringAttribute{
-						Description: "The password for the HTTP server.",
-						Optional:    true,
-						Sensitive:   true,
-						Computed:    true,
-					},
-					"api_key": schema.StringAttribute{
+					"api_key": schema.SingleNestedAttribute{
 						Description: "The API key for the HTTP server.",
 						Optional:    true,
-						Sensitive:   true,
-						Computed:    true,
+						Attributes: map[string]schema.Attribute{
+							"transport_mode": schema.StringAttribute{
+								Description: "The transport mode for the HTTP server.",
+								Required:    true,
+							},
+							"name": schema.StringAttribute{
+								Description: "The name of the API Key.",
+								Required:    true,
+							},
+							"value": schema.StringAttribute{
+								Description: "The value of the API Key.",
+								Required:    true,
+								Sensitive:   true,
+							},
+						},
 					},
-					"transport_mode": schema.StringAttribute{
-						Description: "The transport mode for the HTTP server.",
+					"basic_auth": schema.SingleNestedAttribute{
+						Description: "The basic auth configuration for the HTTP server.",
 						Optional:    true,
-						Computed:    true,
+						Attributes: map[string]schema.Attribute{
+							"username": schema.StringAttribute{
+								Description: "The username for the HTTP server auth.",
+								Required:    true,
+							},
+							"password": schema.StringAttribute{
+								Description: "The password for the HTTP server auth.",
+								Required:    true,
+								Sensitive:   true,
+							},
+						},
 					},
 					"action_body": schema.StringAttribute{
-						Description: "The action body for the HTTP server.",
+						Description: "The base64 encoded action body for the HTTP server.",
 						Optional:    true,
 						Computed:    true,
+						Validators:  []validator.String{custom_validators.Base64Validator{}},
 					},
 				},
 			},
@@ -302,20 +326,22 @@ func (r emailConfigurationResource) ValidateConfig(ctx context.Context, req reso
 			resp.Diagnostics.AddError("authentication_type is missing from http_config", "Authentication type is required for HTTP server type.")
 		}
 
-		if data.HTTPConfig.Username.ValueString() == "" {
-			resp.Diagnostics.AddError("username is missing from http_config", "Username is required for HTTP server type.")
+		if data.HTTPConfig.AuthenticationType.ValueString() == "none" {
+			if data.HTTPConfig.ApiKey != nil || data.HTTPConfig.BasicAuth != nil {
+				resp.Diagnostics.AddError("authentication_method not allowed", "cannot specify an authentication method if authentication_type is set to 'none'")
+			}
 		}
 
-		if data.HTTPConfig.Password.ValueString() == "" {
-			resp.Diagnostics.AddError("password is missing from http_config", "Password is required for HTTP server type.")
+		if data.HTTPConfig.AuthenticationType.ValueString() == "basic" {
+			if data.HTTPConfig.ApiKey != nil {
+				resp.Diagnostics.AddError("api_key not allowed", "cannot specify api_key block when authentication_type is 'basic'")
+			}
 		}
 
-		if data.HTTPConfig.ApiKey.ValueString() == "" {
-			resp.Diagnostics.AddError("api_key is missing from http_config", "API key is required for HTTP server type.")
-		}
-
-		if data.HTTPConfig.TransportMode.ValueString() == "" {
-			resp.Diagnostics.AddError("transport_mode is missing from http_config", "Transport mode is required for HTTP server type.")
+		if data.HTTPConfig.AuthenticationType.ValueString() == "api_key" {
+			if data.HTTPConfig.BasicAuth != nil {
+				resp.Diagnostics.AddError("basic_auth not allowed", "cannot specify basic_auth block when authentication_type is 'api_key'")
+			}
 		}
 
 		if data.HTTPConfig.ActionBody.ValueString() == "" {
@@ -337,10 +363,10 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 
 	var patch []client.JsonPatch
 
-	if plan.ServerType.ValueString() == "default" {
-		var oryConfig orytypes.Config
-		orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
+	var oryConfig orytypes.Config
+	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
 
+	if plan.ServerType.ValueString() == "default" {
 		if oryConfig.Courier.SMTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
@@ -364,6 +390,13 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	if plan.ServerType.ValueString() == "smtp" {
+		if oryConfig.Courier.HTTP != nil {
+			patch = append(patch, client.JsonPatch{
+				Op:   "remove",
+				Path: "/services/identity/config/courier/http",
+			})
+		}
+
 		patch = append(patch, client.JsonPatch{
 			Op:    "replace",
 			Path:  "/services/identity/config/courier/delivery_strategy",
@@ -381,6 +414,30 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 			Op:    "replace",
 			Path:  "/services/identity/config/courier/smtp",
 			Value: smtpConfig,
+		})
+	}
+
+	if plan.ServerType.ValueString() == "http" {
+		if oryConfig.Courier.SMTP != nil {
+			patch = append(patch, client.JsonPatch{
+				Op:   "remove",
+				Path: "/services/identity/config/courier/smtp",
+			})
+		}
+
+		patch = append(patch, client.JsonPatch{
+			Op:    "replace",
+			Path:  "/services/identity/config/courier/delivery_strategy",
+			Value: "http",
+		})
+
+		var httpConfig orytypes.HTTP
+		createHttpConfigRequest(plan.HTTPConfig, &httpConfig)
+
+		patch = append(patch, client.JsonPatch{
+			Op:    "replace",
+			Path:  "/services/identity/config/courier/http",
+			Value: httpConfig,
 		})
 	}
 
@@ -422,6 +479,35 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	}
 }
 
+func createHttpConfigRequest(planHttpConfig *HTTPConfig, http *orytypes.HTTP) {
+	authenticationType := planHttpConfig.AuthenticationType.ValueString()
+
+	http.HttpRequestConfig = &orytypes.HttpRequestConfig{}
+
+	if authenticationType != "none" {
+		http.HttpRequestConfig.HttpAuth = &orytypes.HttpAuth{
+			HttpAuthConfig: &orytypes.HttpAuthConfig{},
+		}
+
+		http.HttpRequestConfig.HttpAuth.Type = authenticationType
+
+		if authenticationType == "api_key" {
+			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.In = planHttpConfig.ApiKey.TransportMode.ValueString()
+			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.Name = planHttpConfig.ApiKey.Name.ValueString()
+			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.Value = planHttpConfig.ApiKey.Value.ValueString()
+		}
+
+		if authenticationType == "basic" {
+			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.User = planHttpConfig.BasicAuth.Username.ValueString()
+			http.HttpRequestConfig.HttpAuth.HttpAuthConfig.Password = planHttpConfig.BasicAuth.Password.ValueString()
+		}
+	}
+
+	http.HttpRequestConfig.Body = "base64://" + planHttpConfig.ActionBody.ValueString()
+	http.HttpRequestConfig.Method = planHttpConfig.RequestMethod.ValueString()
+	http.HttpRequestConfig.Url = planHttpConfig.Url.ValueString()
+}
+
 // Read implements resource.Resource.
 func (r *emailConfigurationResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	tflog.Debug(ctx, "Reading email configuration resource")
@@ -449,14 +535,15 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 
 	// Update the state with current configuration values
 	state.ID = types.StringValue("email_configuration_settings")
+	serverType := "default"
 
-	if projectConfig.Courier.DeliveryStrategy == nil {
-		state.ServerType = types.StringValue("default")
-	} else {
-		state.ServerType = types.StringValue(*projectConfig.Courier.DeliveryStrategy)
+	if projectConfig.Courier.DeliveryStrategy != nil {
+		serverType = *projectConfig.Courier.DeliveryStrategy
 	}
 
-	if projectConfig.Courier.SMTP != nil {
+	state.ServerType = types.StringValue(serverType)
+
+	if serverType == "smtp" {
 		argUsername, argPassword, argHost, argPort, argSecurity, argErr := parseSMTPURL(projectConfig.Courier.SMTP.ConnectionUri)
 
 		if argErr != nil {
@@ -478,8 +565,29 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 		}
 	}
 
-	if projectConfig.Courier.HTTP != nil {
-		return
+	if serverType == "http" {
+		httpAuthType := "none"
+
+		if projectConfig.Courier.HTTP.HttpRequestConfig.HttpAuth != nil {
+			httpAuthType = projectConfig.Courier.HTTP.HttpRequestConfig.HttpAuth.Type
+		}
+
+		username, password, in, name, value := parseHTTPAuthParams(httpAuthType, projectConfig.Courier.HTTP.HttpRequestConfig.HttpAuth.HttpAuthConfig)
+
+		state.HTTPConfig = &HTTPConfig{
+			Url:                helpers.StringOrNil(projectConfig.Courier.HTTP.HttpRequestConfig.Url),
+			RequestMethod:      helpers.StringOrNil(projectConfig.Courier.HTTP.HttpRequestConfig.Method),
+			AuthenticationType: helpers.StringOrNil(httpAuthType),
+			BasicAuth: &BasicAuth{
+				Username: helpers.StringOrNil(username),
+				Password: helpers.StringOrNil(password),
+			},
+			ApiKey: &APIKey{
+				TransportMode: helpers.StringOrNil(in),
+				Name:          helpers.StringOrNil(name),
+				Value:         helpers.StringOrNil(value),
+			},
+		}
 	}
 
 	tflog.Debug(ctx, "Updated State", map[string]interface{}{
@@ -492,6 +600,18 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	if resp.Diagnostics.HasError() {
 		return
 	}
+}
+
+func parseHTTPAuthParams(hhttpAuthType string, httpAuthConfig *orytypes.HttpAuthConfig) (username, password, in, name, value string) {
+	if hhttpAuthType == "api_key" {
+		return "", "", httpAuthConfig.In, httpAuthConfig.Name, httpAuthConfig.Value
+	}
+
+	if hhttpAuthType == "basic" {
+		return httpAuthConfig.User, httpAuthConfig.Password, "", "", ""
+	}
+
+	return "", "", "", "", ""
 }
 
 func parseSMTPURL(smtpURL string) (username, password, host, port, security string, err error) {
@@ -580,6 +700,13 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 	}
 
 	if plan.ServerType.ValueString() == "smtp" {
+		if oryConfig.Courier.HTTP != nil {
+			patch = append(patch, client.JsonPatch{
+				Op:   "remove",
+				Path: "/services/identity/config/courier/http",
+			})
+		}
+
 		patch = append(patch, client.JsonPatch{
 			Op:    "replace",
 			Path:  "/services/identity/config/courier/delivery_strategy",
@@ -597,6 +724,30 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 			Op:    "replace",
 			Path:  "/services/identity/config/courier/smtp",
 			Value: smtpConfig,
+		})
+	}
+
+	if plan.ServerType.ValueString() == "http" {
+		if oryConfig.Courier.SMTP != nil {
+			patch = append(patch, client.JsonPatch{
+				Op:   "remove",
+				Path: "/services/identity/config/courier/smtp",
+			})
+		}
+
+		patch = append(patch, client.JsonPatch{
+			Op:    "replace",
+			Path:  "/services/identity/config/courier/delivery_strategy",
+			Value: "http",
+		})
+
+		var httpConfig orytypes.HTTP
+		createHttpConfigRequest(plan.HTTPConfig, &httpConfig)
+
+		patch = append(patch, client.JsonPatch{
+			Op:    "replace",
+			Path:  "/services/identity/config/courier/http",
+			Value: httpConfig,
 		})
 	}
 
