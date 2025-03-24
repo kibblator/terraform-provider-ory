@@ -12,8 +12,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
-	"github.com/kibblator/terraform-provider-ory/internal/provider/resources"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/resources/email_configuration_resource"
+	"github.com/kibblator/terraform-provider-ory/internal/provider/resources/registration_resource"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	openapiclient "github.com/ory/client-go"
@@ -217,7 +217,7 @@ func (p *oryProvider) DataSources(_ context.Context) []func() datasource.DataSou
 // Resources defines the resources implemented in the provider.
 func (p *oryProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		resources.NewRegistrationResource,
+		registration_resource.NewRegistrationResource,
 		email_configuration_resource.NewEmailConfigurationResource,
 	}
 }

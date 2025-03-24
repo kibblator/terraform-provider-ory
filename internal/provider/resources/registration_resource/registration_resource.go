@@ -1,4 +1,4 @@
-package resources
+package registration_resource
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/kibblator/terraform-provider-ory/internal/provider/helpers"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -158,22 +157,11 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		})
 	}
 
-	hooksRaw := helpers.GetNested(ctx, r.oryClient.ProjectConfig.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
-	hooks, diags := helpers.ConvertToHooks(hooksRaw)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
-	if hooks == nil {
-		resp.Diagnostics.AddError(
-			"Error getting registration hooks from config",
-			"Hooks do not exist in config",
-		)
-	}
+	var oryConfig orytypes.Config
+	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(hooks, "session") == -1 {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
 				Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
@@ -183,7 +171,7 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 			})
 
 		} else {
-			index := findHookIndex(hooks, "session")
+			index := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
 				patch = append(patch, client.JsonPatch{
 					Op:   "remove",
@@ -207,48 +195,24 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
+	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &oryConfig)
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error updating ory registration config",
+			"Could not update ory registration config, unexpected error: "+err.Error(),
+		)
+		return
+	}
+
 	// Map response body to schema and populate Computed attribute values
 	plan.ID = types.StringValue("registration_settings")
 
-	enableRegistration, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config, "selfservice", "flows", "registration", "enabled").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error getting registration enabled from updated config",
-			"Could not get registration enabled from updated config, unexpected error",
-		)
-		return
-	}
+	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
-	enableLoginHints, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config, "selfservice", "flows", "registration", "login_hints").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error getting registration login hints from updated config",
-			"Could not get registration login hints from updated config, unexpected error",
-		)
-		return
-	}
-
-	enablePasswordAuth, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config, "selfservice", "methods", "password", "enabled").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error getting password auth enabled from updated config",
-			"Could not get password auth enabled from updated config, unexpected error",
-		)
-		return
-	}
-
-	hooksRaw = helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
-	updatedHooks, diags := helpers.ConvertToHooks(hooksRaw)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
-	enablePostSigninReg := findHookIndex(updatedHooks, "session") != -1
-
-	plan.EnableLoginHints = types.BoolValue(enableLoginHints)
-	plan.EnableRegistration = types.BoolValue(enableRegistration)
-	plan.EnablePasswordAuth = types.BoolValue(enablePasswordAuth)
+	plan.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
+	plan.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
+	plan.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
 	plan.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
 
@@ -274,6 +238,7 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 
 	// Fetch current project configuration from ORY
 	project, _, err := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
+
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error fetching ORY registration config",
@@ -282,59 +247,17 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	enableRegistration, ok := helpers.GetNested(ctx, project.Services.Identity.Config,
-		"selfservice", "flows", "registration", "enabled").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Type Assertion Error",
-			"Expected boolean for registration enabled, but got a different type.",
-		)
-		return
-	}
+	var oryConfig orytypes.Config
+	orytypes.TransformToConfig(project.Services.Identity.Config, &oryConfig)
 
-	enableLoginHints, ok := helpers.GetNested(ctx, project.Services.Identity.Config,
-		"selfservice", "flows", "registration", "login_hints").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Type Assertion Error",
-			"Expected boolean for registration login hints, but got a different type.",
-		)
-		return
-	}
-
-	enablePasswordAuth, ok := helpers.GetNested(ctx, project.Services.Identity.Config,
-		"selfservice", "methods", "password", "enabled").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Type Assertion Error",
-			"Expected boolean for password auth enabled, but got a different type.",
-		)
-		return
-	}
-
-	updatedHooksRaw := helpers.GetNested(ctx, project.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
-	updatedHooks, diags := helpers.ConvertToHooks(updatedHooksRaw)
-
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
-	enablePostSigninReg := findHookIndex(updatedHooks, "session") != -1
-
-	tflog.Debug(ctx, "Read Registration Resource", map[string]interface{}{
-		"enable_registration":    enableRegistration,
-		"enable_login_hints":     enableLoginHints,
-		"enable_password_auth":   enablePasswordAuth,
-		"enable_post_signin_reg": enablePostSigninReg,
-	})
+	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
 	// Update the state with current configuration values
 	state.ID = types.StringValue("registration_settings")
 
-	state.EnableRegistration = types.BoolValue(enableRegistration)
-	state.EnableLoginHints = types.BoolValue(enableLoginHints)
-	state.EnablePasswordAuth = types.BoolValue(enablePasswordAuth)
+	state.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
+	state.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
+	state.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
 	state.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 
 	tflog.Debug(ctx, "Updated State", map[string]interface{}{
@@ -394,23 +317,11 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		"patch": patch,
 	})
 
-	hooksRaw := helpers.GetNested(ctx, r.oryClient.ProjectConfig.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
-	hooks, diags := helpers.ConvertToHooks(hooksRaw)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
-	}
-
-	if hooks == nil {
-		resp.Diagnostics.AddError(
-			"Error getting registration hooks from config",
-			"Could not get registration hooks from config, unexpected error",
-		)
-		return
-	}
+	var oryConfig orytypes.Config
+	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(hooks, "session") == -1 {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
 			// Add the "session" hook if it doesn't exist
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
@@ -421,7 +332,7 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 			})
 		} else {
 			// Remove the "session" hook if it exists
-			index := findHookIndex(hooks, "session")
+			index := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
 				patch = append(patch, client.JsonPatch{
 					Op:   "remove",
@@ -452,50 +363,15 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	// After successful patch, extract updated values from projectUpdate
-	enableRegistration, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config,
-		"selfservice", "flows", "registration", "enabled").(bool)
+	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &oryConfig)
 
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error extracting registration enabled from updated config",
-			"Could not get registration enabled from updated config, unexpected error.",
-		)
-		return
-	}
-
-	enableLoginHints, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config,
-		"selfservice", "flows", "registration", "login_hints").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error extracting login hints from updated config",
-			"Could not get registration login hints from updated config, unexpected error.",
-		)
-		return
-	}
-
-	enablePasswordAuth, ok := helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config,
-		"selfservice", "methods", "password", "enabled").(bool)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Error extracting password auth from updated config",
-			"Could not get password auth enabled from updated config, unexpected error.",
-		)
-		return
-	}
-
-	hooksRaw = helpers.GetNested(ctx, projectUpdate.Project.Services.Identity.Config, "selfservice", "flows", "registration", "after", "password", "hooks")
-	updatedHooks, diags := helpers.ConvertToHooks(hooksRaw)
-	if diags.HasError() {
-		resp.Diagnostics.Append(diags...)
-		return
-	}
+	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
 	// Update plan with the extracted values
-	plan.EnableRegistration = types.BoolValue(enableRegistration)
-	plan.EnableLoginHints = types.BoolValue(enableLoginHints)
-	plan.EnablePasswordAuth = types.BoolValue(enablePasswordAuth)
-	plan.EnablePostSigninReg = types.BoolValue(findHookIndex(updatedHooks, "session") != -1)
+	plan.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
+	plan.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
+	plan.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
+	plan.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 
 	// Update ID and LastUpdated
 	plan.ID = types.StringValue("registration_settings")

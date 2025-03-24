@@ -3,8 +3,68 @@ package orytypes
 import "encoding/json"
 
 type Config struct {
-	Clients *Clients `json:"clients,omitempty"`
-	Courier *Courier `json:"courier,omitempty"`
+	Clients     *Clients     `json:"clients,omitempty"`
+	Courier     *Courier     `json:"courier,omitempty"`
+	SelfService *SelfService `json:"selfservice,omitempty"`
+}
+
+type SelfService struct {
+	Flows   *Flows   `json:"flows,omitempty"`
+	Methods *Methods `json:"methods,omitempty"`
+}
+
+type Methods struct {
+	Password PasswordMethod `json:"password,omitempty"`
+}
+
+type PasswordMethod struct {
+	Config  PasswordMethodConfig `json:"config,omitempty"`
+	Enabled bool                 `json:"enabled"`
+}
+
+type PasswordMethodConfig struct {
+	HaveIBeenPwnedEnabled            bool `json:"haveibeenpwned_enabled,omitempty"`
+	IdentifierSimilarityCheckEnabled bool `json:"identifier_similarity_check_enabled,omitempty"`
+	IgnoreNetworkErrors              bool `json:"ignore_network_errors,omitempty"`
+	MaxBreaches                      bool `json:"max_breaches,omitempty"`
+	MinPasswordLength                bool `json:"min_password_length,omitempty"`
+}
+
+type Flows struct {
+	Registration *Registration `json:"registration,omitempty"`
+}
+
+type Registration struct {
+	After               After  `json:"after"`
+	Before              Before `json:"before"`
+	EnableLegacyOneStep bool   `json:"enable_legacy_one_step"`
+	Enabled             bool   `json:"enabled"`
+	Lifespan            string `json:"lifespan"`
+	LoginHints          bool   `json:"login_hints"`
+	UIURL               string `json:"ui_url"`
+}
+
+type After struct {
+	Code     AuthMethod `json:"code"`
+	Hooks    []Hook     `json:"hooks"`
+	OIDC     AuthMethod `json:"oidc"`
+	Passkey  AuthMethod `json:"passkey"`
+	Password AuthMethod `json:"password"`
+	SAML     AuthMethod `json:"saml"`
+	WebAuthn AuthMethod `json:"webauthn"`
+}
+
+type Before struct {
+	Hooks []Hook `json:"hooks"`
+}
+
+type Hook struct {
+	Hook   string                 `json:"hook"`
+	Config map[string]interface{} `json:"config,omitempty"`
+}
+
+type AuthMethod struct {
+	Hooks []Hook `json:"hooks"`
 }
 
 type Clients struct {
