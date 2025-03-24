@@ -532,7 +532,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	state.ServerType = types.StringValue(serverType)
 
 	if serverType == "smtp" {
-		err := ApiToSmtpConfig(projectConfig.Courier.SMTP, state)
+		err := ApiToSmtpConfig(projectConfig.Courier.SMTP, &state)
 
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -544,7 +544,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	}
 
 	if serverType == "http" {
-		ApiToHttpConfig(projectConfig.Courier.HTTP, state)
+		ApiToHttpConfig(projectConfig.Courier.HTTP, &state)
 	}
 
 	tflog.Debug(ctx, "Updated State", map[string]interface{}{

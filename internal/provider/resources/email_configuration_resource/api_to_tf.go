@@ -9,7 +9,7 @@ import (
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 )
 
-func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig emailConfigurationResourceModel) {
+func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationResourceModel) {
 	httpAuthType := "none"
 
 	if httpConfig.HttpRequestConfig.HttpAuth != nil {
@@ -54,7 +54,7 @@ func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig emailConfigurationResou
 	}
 }
 
-func ApiToSmtpConfig(smtpConfig *orytypes.SMTP, tfConfig emailConfigurationResourceModel) error {
+func ApiToSmtpConfig(smtpConfig *orytypes.SMTP, tfConfig *emailConfigurationResourceModel) error {
 	argUsername, argPassword, argHost, argPort, argSecurity, argErr := parseSMTPURL(smtpConfig.ConnectionUri)
 
 	if argErr != nil {
