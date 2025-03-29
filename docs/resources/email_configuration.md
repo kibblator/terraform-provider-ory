@@ -64,7 +64,7 @@ resource "ory_email_configuration" "http" {
       value          = "super secret value"
     }
 
-    action_body = "aGVsbG8gd29ybGQ=" # base64 encoded string containing the jsonnet body (uses default payload from ory docs if not provided)
+    action_body = base64encode(file("./somefile.jsonnet")) # base64 encoded string containing the jsonnet body (uses default payload from ory docs if not provided)
   }
 
   smtp_headers = [
@@ -101,14 +101,17 @@ resource "ory_email_configuration" "http" {
 <a id="nestedatt--http_config"></a>
 ### Nested Schema for `http_config`
 
+Required:
+
+- `authentication_type` (String) The authentication type for the HTTP server.
+- `request_method` (String) The request method for the HTTP server.
+- `url` (String) The URL of the HTTP server.
+
 Optional:
 
 - `action_body` (String) The base64 encoded action body for the HTTP server.
 - `api_key` (Attributes) The API key for the HTTP server. (see [below for nested schema](#nestedatt--http_config--api_key))
-- `authentication_type` (String) The authentication type for the HTTP server.
 - `basic_auth` (Attributes) The basic auth configuration for the HTTP server. (see [below for nested schema](#nestedatt--http_config--basic_auth))
-- `request_method` (String) The request method for the HTTP server.
-- `url` (String) The URL of the HTTP server.
 
 <a id="nestedatt--http_config--api_key"></a>
 ### Nested Schema for `http_config.api_key`
@@ -133,7 +136,7 @@ Required:
 <a id="nestedatt--smtp_config"></a>
 ### Nested Schema for `smtp_config`
 
-Optional:
+Required:
 
 - `host` (String) The SMTP server host.
 - `password` (String, Sensitive) The password for the SMTP server.
