@@ -1,4 +1,4 @@
-package resources_test
+package registration_resource_test
 
 import (
 	"testing"
