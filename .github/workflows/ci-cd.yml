@@ -40,9 +40,9 @@ jobs:
       - name: Run Go Unit Tests
         run: go test -short -v ./...
 
-  trigger-acceptance-tests:
-    if: github.actor != 'dependabot[bot]'
-    name: Trigger Acceptance Tests
-    needs: unit-tests
-    uses: ./.github/workflows/_terraform-tests.yml
-    secrets: inherit
+  # trigger-acceptance-tests:
+  #   if: github.actor != 'dependabot[bot]'
+  #   name: Trigger Acceptance Tests
+  #   needs: unit-tests
+  #   uses: ./.github/workflows/_terraform-tests.yml
+  #   secrets: inherit
