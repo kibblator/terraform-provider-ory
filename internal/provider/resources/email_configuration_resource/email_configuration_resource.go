@@ -449,7 +449,6 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	orytypes.TransformToConfig(project.Services.Identity.Config, &projectConfig)
 
 	// Update the state with current configuration values
-	state.ID = types.StringValue("email_configuration_settings")
 	serverType := "default"
 
 	if projectConfig.Courier.DeliveryStrategy != nil {
@@ -588,7 +587,6 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 		return
 	}
 
-	plan.ID = types.StringValue("email_configuration_settings")
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)

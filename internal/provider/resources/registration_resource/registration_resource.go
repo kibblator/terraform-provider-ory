@@ -241,7 +241,6 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
 	// Update the state with current configuration values
-	state.ID = types.StringValue("registration_settings")
 
 	state.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
 	state.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
@@ -271,10 +270,6 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 
 	// Initialize the patch list
 	var patch []client.JsonPatch
-
-	tflog.Debug(ctx, "Update Plan", map[string]interface{}{
-		"plan": plan,
-	})
 
 	// Compare the plan with the current state and add patches for changes
 	if !plan.EnableRegistration.IsNull() {
@@ -357,8 +352,6 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 	plan.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
 	plan.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 
-	// Update ID and LastUpdated
-	plan.ID = types.StringValue("registration_settings")
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
 	// Set the updated plan to the state

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -56,7 +57,15 @@ func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationReso
 	if httpConfig.HttpRequestConfig.Headers != nil {
 		headers := []SMTPHeader{}
 
-		for key, value := range httpConfig.HttpRequestConfig.Headers {
+		keys := make([]string, 0, len(httpConfig.HttpRequestConfig.Headers))
+		for key := range httpConfig.HttpRequestConfig.Headers {
+			keys = append(keys, key)
+		}
+
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			value := httpConfig.HttpRequestConfig.Headers[key]
 			headers = append(headers, SMTPHeader{
 				Key:   types.StringValue(key),
 				Value: types.StringValue(value),
@@ -89,7 +98,15 @@ func ApiToSmtpConfig(smtpConfig *orytypes.SMTP, tfConfig *emailConfigurationReso
 	if smtpConfig.Headers != nil {
 		headers := []SMTPHeader{}
 
-		for key, value := range smtpConfig.Headers {
+		keys := make([]string, 0, len(smtpConfig.Headers))
+		for key := range smtpConfig.Headers {
+			keys = append(keys, key)
+		}
+
+		sort.Strings(keys)
+
+		for _, key := range keys {
+			value := smtpConfig.Headers[key]
 			headers = append(headers, SMTPHeader{
 				Key:   types.StringValue(key),
 				Value: types.StringValue(value),
