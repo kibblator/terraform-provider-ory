@@ -181,10 +181,6 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		}
 	}
 
-	tflog.Debug(ctx, "Generated Patch", map[string]interface{}{
-		"patch": patch,
-	})
-
 	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
 
 	if err != nil {
@@ -196,14 +192,6 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &oryConfig)
-
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error updating ory registration config",
-			"Could not update ory registration config, unexpected error: "+err.Error(),
-		)
-		return
-	}
 
 	// Map response body to schema and populate Computed attribute values
 	plan.ID = types.StringValue("registration_settings")
@@ -312,10 +300,6 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 			Value: plan.EnablePasswordAuth.ValueBool(),
 		})
 	}
-
-	tflog.Debug(ctx, "Generated Patch", map[string]interface{}{
-		"patch": patch,
-	})
 
 	var oryConfig orytypes.Config
 	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
