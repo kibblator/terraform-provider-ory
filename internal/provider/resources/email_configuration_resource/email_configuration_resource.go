@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	oryclient "github.com/kibblator/terraform-provider-ory/internal/provider/clients"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/custom_validators"
 
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
@@ -28,7 +29,7 @@ var (
 )
 
 type emailConfigurationResource struct {
-	oryClient *orytypes.OryClient
+	oryClient *oryclient.OryClient
 }
 
 type SMTPConfig struct {
@@ -87,7 +88,7 @@ func (r *emailConfigurationResource) Configure(_ context.Context, req resource.C
 		return
 	}
 
-	client, ok := req.ProviderData.(*orytypes.OryClient)
+	client, ok := req.ProviderData.(*oryclient.OryClient)
 
 	if !ok {
 		resp.Diagnostics.AddError(
@@ -305,25 +306,22 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 
 	var patch []client.JsonPatch
 
-	var oryConfig orytypes.Config
-	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
-
 	if plan.ServerType.ValueString() == "default" {
-		if oryConfig.Courier.SMTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.SMTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/smtp",
 			})
 		}
 
-		if oryConfig.Courier.HTTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/http",
 			})
 		}
 
-		if oryConfig.Courier.DeliveryStrategy != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.DeliveryStrategy != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/delivery_strategy",
@@ -332,7 +330,7 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	if plan.ServerType.ValueString() == "smtp" {
-		if oryConfig.Courier.HTTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/http",
@@ -356,7 +354,7 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	}
 
 	if plan.ServerType.ValueString() == "http" {
-		if oryConfig.Courier.SMTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.SMTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/smtp",
@@ -394,7 +392,8 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 		return
 	}
 
-	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
+	project, _ := r.oryClient.APIClient.GetProject()
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -407,13 +406,10 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	plan.ID = types.StringValue("email_configuration_settings")
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
 
-	var updatedConfig orytypes.Config
-	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &updatedConfig)
-
-	if updatedConfig.Courier.DeliveryStrategy == nil {
+	if projectUpdate.Project.Services.Identity.Config.Courier.DeliveryStrategy == nil {
 		plan.ServerType = types.StringValue("default")
 	} else {
-		plan.ServerType = types.StringValue(*updatedConfig.Courier.DeliveryStrategy)
+		plan.ServerType = types.StringValue(*projectUpdate.Project.Services.Identity.Config.Courier.DeliveryStrategy)
 	}
 
 	diags = resp.State.Set(ctx, plan)
@@ -436,7 +432,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	}
 
 	// Fetch current project configuration from ORY
-	project, _, err := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
+	project, err := r.oryClient.APIClient.GetProject()
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error fetching ORY email configuration",
@@ -445,20 +441,17 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 		return
 	}
 
-	var projectConfig orytypes.Config
-	orytypes.TransformToConfig(project.Services.Identity.Config, &projectConfig)
-
 	// Update the state with current configuration values
 	serverType := "default"
 
-	if projectConfig.Courier.DeliveryStrategy != nil {
-		serverType = *projectConfig.Courier.DeliveryStrategy
+	if project.Services.Identity.Config.Courier.DeliveryStrategy != nil {
+		serverType = *project.Services.Identity.Config.Courier.DeliveryStrategy
 	}
 
 	state.ServerType = types.StringValue(serverType)
 
 	if serverType == "smtp" {
-		err := ApiToSmtpConfig(projectConfig.Courier.SMTP, &state)
+		err := ApiToSmtpConfig(project.Services.Identity.Config.Courier.SMTP, &state)
 
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -470,7 +463,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	}
 
 	if serverType == "http" {
-		err := ApiToHttpConfig(projectConfig.Courier.HTTP, &state)
+		err := ApiToHttpConfig(project.Services.Identity.Config.Courier.HTTP, &state)
 
 		if err != nil {
 			resp.Diagnostics.AddError(
@@ -503,25 +496,23 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 	}
 
 	var patch []client.JsonPatch
-	var oryConfig orytypes.Config
-	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
 
 	if plan.ServerType.ValueString() == "default" {
-		if oryConfig.Courier.SMTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.SMTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/smtp",
 			})
 		}
 
-		if oryConfig.Courier.HTTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/http",
 			})
 		}
 
-		if oryConfig.Courier.DeliveryStrategy != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.DeliveryStrategy != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/delivery_strategy",
@@ -530,7 +521,7 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 	}
 
 	if plan.ServerType.ValueString() == "smtp" {
-		if oryConfig.Courier.HTTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.HTTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/http",
@@ -554,7 +545,7 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 	}
 
 	if plan.ServerType.ValueString() == "http" {
-		if oryConfig.Courier.SMTP != nil {
+		if r.oryClient.ProjectConfig.Services.Identity.Config.Courier.SMTP != nil {
 			patch = append(patch, client.JsonPatch{
 				Op:   "remove",
 				Path: "/services/identity/config/courier/smtp",
@@ -577,7 +568,8 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 		})
 	}
 
-	_, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
+	project, _ := r.oryClient.APIClient.GetProject()
+	_, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
 
 	if err != nil {
 		resp.Diagnostics.AddError(

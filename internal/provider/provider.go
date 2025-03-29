@@ -12,9 +12,9 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	oryclient "github.com/kibblator/terraform-provider-ory/internal/provider/clients"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/resources/email_configuration_resource"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/resources/registration_resource"
-	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	openapiclient "github.com/ory/client-go"
 )
@@ -180,12 +180,12 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	configuration.Host = host
 	configuration.AddDefaultHeader("Authorization", "Bearer "+workspace_api_key)
 
-	apiClient := openapiclient.NewAPIClient(configuration)
-	response, r, err := apiClient.ProjectAPI.GetProject(ctx, project_id).Execute()
+	apiClient := oryclient.NewClient(host, workspace_api_key, project_id)
+	response, err := apiClient.GetProject()
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProject``: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
+		//fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 		resp.Diagnostics.AddError(
 			"Unable to get project configuration using the Ory API",
 			"An unexpected error occurred when calling GetProject on the Ory API client. "+
@@ -195,7 +195,7 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 		return
 	}
 
-	client := &orytypes.OryClient{
+	client := &oryclient.OryClient{
 		APIClient:     apiClient,
 		ProjectConfig: response,
 		ProjectID:     project_id,

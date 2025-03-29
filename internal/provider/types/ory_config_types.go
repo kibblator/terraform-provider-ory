@@ -2,6 +2,24 @@ package orytypes
 
 import "encoding/json"
 
+type ProjectConfig struct {
+	Project Project `json:"project,omitempty"`
+}
+
+type Project struct {
+	Id         string   `json:"id,omitempty"`
+	RevisionId string   `json:"revision_id,omitempty"`
+	Services   Services `json:"services,omitempty"`
+}
+
+type Services struct {
+	Identity Identity `json:"identity,omitempty"`
+}
+
+type Identity struct {
+	Config Config `json:"config,omitempty"`
+}
+
 type Config struct {
 	Clients     *Clients     `json:"clients,omitempty"`
 	Courier     *Courier     `json:"courier,omitempty"`
@@ -23,11 +41,11 @@ type PasswordMethod struct {
 }
 
 type PasswordMethodConfig struct {
-	HaveIBeenPwnedEnabled            bool `json:"haveibeenpwned_enabled,omitempty"`
-	IdentifierSimilarityCheckEnabled bool `json:"identifier_similarity_check_enabled,omitempty"`
-	IgnoreNetworkErrors              bool `json:"ignore_network_errors,omitempty"`
-	MaxBreaches                      bool `json:"max_breaches,omitempty"`
-	MinPasswordLength                bool `json:"min_password_length,omitempty"`
+	HaveIBeenPwnedEnabled            bool  `json:"haveibeenpwned_enabled,omitempty"`
+	IdentifierSimilarityCheckEnabled bool  `json:"identifier_similarity_check_enabled,omitempty"`
+	IgnoreNetworkErrors              bool  `json:"ignore_network_errors,omitempty"`
+	MaxBreaches                      int32 `json:"max_breaches,omitempty"`
+	MinPasswordLength                int32 `json:"min_password_length,omitempty"`
 }
 
 type Flows struct {

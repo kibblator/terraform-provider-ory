@@ -10,8 +10,6 @@ import (
 )
 
 func TestAccOryRegistrationResource(t *testing.T) {
-	t.Parallel()
-
 	randomName := acctest.GenerateRandomResourceName()
 	resourceName := fmt.Sprintf("ory_registration.%s", randomName)
 
@@ -65,7 +63,6 @@ resource "ory_registration" "%s" {
 					resource.TestCheckResourceAttrSet(resourceName, "last_updated"), // Ensure 'last_updated' is updated
 				),
 			},
-			// Delete testing automatically occurs in TestCase cleanup
 		},
 	})
 }

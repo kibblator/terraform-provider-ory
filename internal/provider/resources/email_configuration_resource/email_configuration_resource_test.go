@@ -8,37 +8,7 @@ import (
 	"github.com/kibblator/terraform-provider-ory/internal/provider/acctest"
 )
 
-func TestAccOryEmailConfiguration_Default(t *testing.T) {
-	t.Parallel()
-
-	randomName := acctest.GenerateRandomResourceName()
-	resourceName := fmt.Sprintf("ory_email_configuration.%s", randomName)
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
-		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccOryEmailConfiguration_Default(randomName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "server_type", "default"),
-				),
-			},
-		},
-	})
-}
-
-func testAccOryEmailConfiguration_Default(randomName string) string {
-	return fmt.Sprintf(`
-resource "ory_email_configuration" "%s" {
-  server_type = "default"
-}
-`, randomName)
-}
-
 func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
-	t.Parallel()
-
 	randomName := acctest.GenerateRandomResourceName()
 	resourceName := fmt.Sprintf("ory_email_configuration.%s", randomName)
 
@@ -56,6 +26,31 @@ func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.port", "587"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.security", "starttls"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.username", "username"),
+				),
+			},
+			{
+				ResourceName:      resourceName,
+				ImportState:       true,
+				ImportStateVerify: true,
+				ImportStateVerifyIgnore: []string{
+					"last_updated", // If 'last_updated' isn't returned from the ORY API, ignore it during import verification
+				},
+			},
+			{
+				Config: testAccOryEmailConfiguration_HTTP(randomName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "server_type", "http"),
+					resource.TestCheckResourceAttr(resourceName, "http_config.url", "https://ory.sh"),
+					resource.TestCheckResourceAttr(resourceName, "http_config.request_method", "POST"),
+					resource.TestCheckResourceAttr(resourceName, "http_config.authentication_type", "basic_auth"),
+					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.username", "username"),
+					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.password", "password"),
+				),
+			},
+			{
+				Config: testAccOryEmailConfiguration_Default(randomName),
+				Check: resource.ComposeTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "server_type", "default"),
 				),
 			},
 		},
@@ -91,29 +86,12 @@ resource "ory_email_configuration" "%s" {
 `, randomName)
 }
 
-func TestAccOryEmailConfiguration_HTTP(t *testing.T) {
-	t.Parallel()
-
-	randomName := acctest.GenerateRandomResourceName()
-	resourceName := fmt.Sprintf("ory_email_configuration.%s", randomName)
-
-	resource.Test(t, resource.TestCase{
-		ProtoV6ProviderFactories: acctest.TestAccProtoV6ProviderFactories,
-		PreCheck:                 func() { acctest.TestAccPreCheck(t) },
-		Steps: []resource.TestStep{
-			{
-				Config: testAccOryEmailConfiguration_HTTP(randomName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "server_type", "http"),
-					resource.TestCheckResourceAttr(resourceName, "http_config.url", "https://ory.sh"),
-					resource.TestCheckResourceAttr(resourceName, "http_config.request_method", "POST"),
-					resource.TestCheckResourceAttr(resourceName, "http_config.authentication_type", "basic_auth"),
-					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.username", "username"),
-					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.password", "password"),
-				),
-			},
-		},
-	})
+func testAccOryEmailConfiguration_Default(randomName string) string {
+	return fmt.Sprintf(`
+resource "ory_email_configuration" "%s" {
+  server_type = "default"
+}
+`, randomName)
 }
 
 func testAccOryEmailConfiguration_HTTP(randomName string) string {

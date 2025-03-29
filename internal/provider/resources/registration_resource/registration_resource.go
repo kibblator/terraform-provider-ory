@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	oryclient "github.com/kibblator/terraform-provider-ory/internal/provider/clients"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -32,7 +33,7 @@ func NewRegistrationResource() resource.Resource {
 
 // registrationResource is the resource implementation.
 type registrationResource struct {
-	oryClient *orytypes.OryClient
+	oryClient *oryclient.OryClient
 }
 
 // registrationResourceModel maps the resource schema data.
@@ -53,7 +54,7 @@ func (r *registrationResource) Configure(_ context.Context, req resource.Configu
 		return
 	}
 
-	client, ok := req.ProviderData.(*orytypes.OryClient)
+	client, ok := req.ProviderData.(*oryclient.OryClient)
 
 	if !ok {
 		resp.Diagnostics.AddError(
@@ -157,11 +158,8 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		})
 	}
 
-	var oryConfig orytypes.Config
-	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
-
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
 				Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
@@ -171,7 +169,7 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 			})
 
 		} else {
-			index := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session")
+			index := findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
 				patch = append(patch, client.JsonPatch{
 					Op:   "remove",
@@ -181,7 +179,8 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		}
 	}
 
-	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, r.oryClient.ProjectConfig.RevisionId).JsonPatch(patch).Execute()
+	project, _ := r.oryClient.APIClient.GetProject()
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -191,16 +190,14 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &oryConfig)
-
 	// Map response body to schema and populate Computed attribute values
 	plan.ID = types.StringValue("registration_settings")
 
-	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
+	enablePostSigninReg := findHookIndex(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
-	plan.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
-	plan.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
-	plan.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
+	plan.EnableLoginHints = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.LoginHints)
+	plan.EnableRegistration = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.Enabled)
+	plan.EnablePasswordAuth = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Methods.Password.Enabled)
 	plan.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
 
@@ -225,7 +222,7 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	// Fetch current project configuration from ORY
-	project, _, err := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
+	project, err := r.oryClient.APIClient.GetProject()
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -235,16 +232,13 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	var oryConfig orytypes.Config
-	orytypes.TransformToConfig(project.Services.Identity.Config, &oryConfig)
-
-	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
+	enablePostSigninReg := findHookIndex(project.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
 	// Update the state with current configuration values
 
-	state.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
-	state.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
-	state.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
+	state.EnableRegistration = types.BoolValue(project.Services.Identity.Config.SelfService.Flows.Registration.Enabled)
+	state.EnableLoginHints = types.BoolValue(project.Services.Identity.Config.SelfService.Flows.Registration.LoginHints)
+	state.EnablePasswordAuth = types.BoolValue(project.Services.Identity.Config.SelfService.Methods.Password.Enabled)
 	state.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 
 	tflog.Debug(ctx, "Updated State", map[string]interface{}{
@@ -296,11 +290,8 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		})
 	}
 
-	var oryConfig orytypes.Config
-	orytypes.TransformToConfig(r.oryClient.ProjectConfig.Services.Identity.Config, &oryConfig)
-
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
+		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
 			// Add the "session" hook if it doesn't exist
 			patch = append(patch, client.JsonPatch{
 				Op:   "add",
@@ -311,7 +302,7 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 			})
 		} else {
 			// Remove the "session" hook if it exists
-			index := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session")
+			index := findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
 				patch = append(patch, client.JsonPatch{
 					Op:   "remove",
@@ -331,8 +322,8 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	//get latest revision
-	project, _, _ := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
-	projectUpdate, _, err := r.oryClient.APIClient.ProjectAPI.PatchProjectWithRevision(ctx, r.oryClient.ProjectID, project.RevisionId).JsonPatch(patch).Execute()
+	project, _ := r.oryClient.APIClient.GetProject()
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -342,14 +333,12 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	orytypes.TransformToConfig(projectUpdate.Project.Services.Identity.Config, &oryConfig)
-
-	enablePostSigninReg := findHookIndex(oryConfig.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
+	enablePostSigninReg := findHookIndex(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") != -1
 
 	// Update plan with the extracted values
-	plan.EnableLoginHints = types.BoolValue(oryConfig.SelfService.Flows.Registration.LoginHints)
-	plan.EnableRegistration = types.BoolValue(oryConfig.SelfService.Flows.Registration.Enabled)
-	plan.EnablePasswordAuth = types.BoolValue(oryConfig.SelfService.Methods.Password.Enabled)
+	plan.EnableLoginHints = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.LoginHints)
+	plan.EnableRegistration = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Flows.Registration.Enabled)
+	plan.EnablePasswordAuth = types.BoolValue(projectUpdate.Project.Services.Identity.Config.SelfService.Methods.Password.Enabled)
 	plan.EnablePostSigninReg = types.BoolValue(enablePostSigninReg)
 
 	plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC3339))
