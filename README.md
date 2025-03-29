@@ -7,15 +7,15 @@
 
 </div>
 
--------------------------------------
+---
 
 The is a Terraform Provider for managing Ory Network configuration through [Terraform](https://www.terraform.io/).
 
--------------------------------------
+---
 
 ## Documentation
 
-TODO
+[Resources](docs/resources/)
 
 ## Getting Started
 
@@ -43,3 +43,4 @@ provider "ory" {}
 
 ```shell
 $ terraform init
+```
