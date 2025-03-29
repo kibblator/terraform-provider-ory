@@ -1,15 +1,19 @@
 package email_configuration_resource
 
 import (
+	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/kibblator/terraform-provider-ory/internal/provider/helpers"
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 )
 
-func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationResourceModel) {
+func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationResourceModel) error {
 	httpAuthType := "none"
 
 	if httpConfig.HttpRequestConfig.HttpAuth != nil {
@@ -22,7 +26,16 @@ func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationReso
 		Url:                helpers.StringOrNil(httpConfig.HttpRequestConfig.Url),
 		RequestMethod:      helpers.StringOrNil(httpConfig.HttpRequestConfig.Method),
 		AuthenticationType: helpers.StringOrNil(httpAuthType),
-		ActionBody:         helpers.StringOrNil(httpConfig.HttpRequestConfig.Body),
+	}
+
+	if httpConfig.HttpRequestConfig.Body != "" {
+		body, err := getBodyContents(httpConfig.HttpRequestConfig.Body)
+
+		if err != nil {
+			return err
+		}
+
+		tfConfig.HTTPConfig.ActionBody = helpers.StringOrNil(body)
 	}
 
 	if username != "" && password != "" {
@@ -52,6 +65,8 @@ func ApiToHttpConfig(httpConfig *orytypes.HTTP, tfConfig *emailConfigurationReso
 
 		tfConfig.SMTPHeaders = &headers
 	}
+
+	return nil
 }
 
 func ApiToSmtpConfig(smtpConfig *orytypes.SMTP, tfConfig *emailConfigurationResourceModel) error {
@@ -93,24 +108,20 @@ func parseSMTPURL(smtpURL string) (username, password, host, port, security stri
 		return "", "", "", "", "", err
 	}
 
-	// Extract username and password
 	if parsedURL.User != nil {
 		username = parsedURL.User.Username()
 		password, _ = parsedURL.User.Password() // Password might be empty
 	}
 
-	// Extract host and port
 	host = parsedURL.Hostname()
 	port = parsedURL.Port()
 
-	// Default security type
 	if host == "" {
 		security = ""
 	} else {
 		security = "starttls"
 	}
 
-	// Check for security parameter
 	queryParams := parsedURL.Query()
 	param := ""
 
@@ -139,14 +150,38 @@ func parseSMTPURL(smtpURL string) (username, password, host, port, security stri
 	return username, password, host, port, security, nil
 }
 
-func parseHTTPAuthParams(hhttpAuthType string, httpAuthConfig *orytypes.HttpAuthConfig) (username, password, in, name, value string) {
-	if hhttpAuthType == "api_key" {
+func parseHTTPAuthParams(httpAuthType string, httpAuthConfig *orytypes.HttpAuthConfig) (username, password, in, name, value string) {
+	if httpAuthType == "api_key" {
 		return "", "", httpAuthConfig.In, httpAuthConfig.Name, httpAuthConfig.Value
 	}
 
-	if hhttpAuthType == "basic_auth" {
+	if httpAuthType == "basic_auth" {
 		return httpAuthConfig.User, httpAuthConfig.Password, "", "", ""
 	}
 
 	return "", "", "", "", ""
+}
+
+func getBodyContents(input string) (string, error) {
+	parsedURL, err := url.ParseRequestURI(input)
+	if err != nil || !strings.HasPrefix(parsedURL.Scheme, "http") {
+		return input, nil
+	}
+
+	resp, err := http.Get(input)
+	if err != nil {
+		return "", fmt.Errorf("error fetching file: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("error: received non-200 response code: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("error reading response body: %v", err)
+	}
+
+	return base64.RawStdEncoding.WithPadding(base64.StdPadding).EncodeToString(data), nil
 }

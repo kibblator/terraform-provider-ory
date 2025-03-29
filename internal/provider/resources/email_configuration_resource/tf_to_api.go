@@ -37,7 +37,9 @@ func HttpConfigToApi(tfConfig emailConfigurationResourceModel, httpConfig *oryty
 		}
 	}
 
-	httpConfig.HttpRequestConfig.Body = "base64://" + tfConfig.HTTPConfig.ActionBody.ValueString()
+	if tfConfig.HTTPConfig.ActionBody.ValueString() != "" {
+		httpConfig.HttpRequestConfig.Body = "base64://" + tfConfig.HTTPConfig.ActionBody.ValueString()
+	}
 	httpConfig.HttpRequestConfig.Method = tfConfig.HTTPConfig.RequestMethod.ValueString()
 	httpConfig.HttpRequestConfig.Url = tfConfig.HTTPConfig.Url.ValueString()
 	httpConfig.HttpRequestConfig.Headers = headersMap

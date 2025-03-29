@@ -134,42 +134,35 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 				Attributes: map[string]schema.Attribute{
 					"sender_name": schema.StringAttribute{
 						Description: "The name of the sender.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"sender_address": schema.StringAttribute{
 						Description: "The email address of the sender.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"host": schema.StringAttribute{
 						Description: "The SMTP server host.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"port": schema.StringAttribute{
 						Description: "The SMTP server port.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"security": schema.StringAttribute{
 						Description: "The security type of the SMTP server.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOf("starttls", "starttls_notrust", "cleartext", "implicittls", "implicittls_notrust"),
 						},
 					},
 					"username": schema.StringAttribute{
 						Description: "The username for the SMTP server.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"password": schema.StringAttribute{
 						Description: "The password for the SMTP server.",
-						Optional:    true,
+						Required:    true,
 						Sensitive:   true,
-						Computed:    true,
 					},
 				},
 			},
@@ -179,21 +172,18 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 				Attributes: map[string]schema.Attribute{
 					"url": schema.StringAttribute{
 						Description: "The URL of the HTTP server.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 					},
 					"request_method": schema.StringAttribute{
 						Description: "The request method for the HTTP server.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOf("GET", "POST", "PUT", "PATCH"),
 						},
 					},
 					"authentication_type": schema.StringAttribute{
 						Description: "The authentication type for the HTTP server.",
-						Optional:    true,
-						Computed:    true,
+						Required:    true,
 						Validators: []validator.String{
 							stringvalidator.OneOf("none", "basic_auth", "api_key"),
 						},
@@ -238,7 +228,6 @@ func (r *emailConfigurationResource) Schema(_ context.Context, req resource.Sche
 					"action_body": schema.StringAttribute{
 						Description: "The base64 encoded action body for the HTTP server.",
 						Optional:    true,
-						Computed:    true,
 						Validators:  []validator.String{custom_validators.Base64Validator{}},
 					},
 				},
@@ -288,34 +277,6 @@ func (r emailConfigurationResource) ValidateConfig(ctx context.Context, req reso
 			resp.Diagnostics.AddError("smtp_config is missing", "SMTP configuration is required with SMTP server type.")
 			return
 		}
-
-		if data.SMTPConfig.SenderName.ValueString() == "" {
-			resp.Diagnostics.AddError("sender_name is missing from smtp_config", "Sender name is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.SenderAddress.ValueString() == "" {
-			resp.Diagnostics.AddError("sender_address is missing from smtp_config", "Sender address is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.Host.ValueString() == "" {
-			resp.Diagnostics.AddError("host is missing from smtp_config", "Host is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.Port.ValueString() == "" {
-			resp.Diagnostics.AddError("port is missing from smtp_config", "Port is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.Security.ValueString() == "" {
-			resp.Diagnostics.AddError("security is missing from smtp_config", "Security is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.Username.ValueString() == "" {
-			resp.Diagnostics.AddError("username is missing from smtp_config", "Username is required for SMTP server type.")
-		}
-
-		if data.SMTPConfig.Password.ValueString() == "" {
-			resp.Diagnostics.AddError("password is missing from smtp_config", "Password is required for SMTP server type.")
-		}
 	}
 
 	if data.ServerType.ValueString() == "http" {
@@ -327,40 +288,6 @@ func (r emailConfigurationResource) ValidateConfig(ctx context.Context, req reso
 		if data.HTTPConfig == nil {
 			resp.Diagnostics.AddError("http_config is missing", "HTTP configuration is required with HTTP server type.")
 			return
-		}
-
-		if data.HTTPConfig.Url.ValueString() == "" {
-			resp.Diagnostics.AddError("url is missing from http_config", "URL is required for HTTP server type.")
-		}
-
-		if data.HTTPConfig.RequestMethod.ValueString() == "" {
-			resp.Diagnostics.AddError("request_method is missing from http_config", "Request method is required for HTTP server type.")
-		}
-
-		if data.HTTPConfig.AuthenticationType.ValueString() == "" {
-			resp.Diagnostics.AddError("authentication_type is missing from http_config", "Authentication type is required for HTTP server type.")
-		}
-
-		if data.HTTPConfig.AuthenticationType.ValueString() == "none" {
-			if data.HTTPConfig.ApiKey != nil || data.HTTPConfig.BasicAuth != nil {
-				resp.Diagnostics.AddError("authentication_method not allowed", "cannot specify an authentication method if authentication_type is set to 'none'")
-			}
-		}
-
-		if data.HTTPConfig.AuthenticationType.ValueString() == "basic_auth" {
-			if data.HTTPConfig.ApiKey != nil {
-				resp.Diagnostics.AddError("api_key not allowed", "cannot specify api_key block when authentication_type is 'basic'")
-			}
-		}
-
-		if data.HTTPConfig.AuthenticationType.ValueString() == "api_key" {
-			if data.HTTPConfig.BasicAuth != nil {
-				resp.Diagnostics.AddError("basic_auth not allowed", "cannot specify basic_auth block when authentication_type is 'api_key'")
-			}
-		}
-
-		if data.HTTPConfig.ActionBody.ValueString() == "" {
-			resp.Diagnostics.AddError("action_body is missing from http_config", "Action body is required for HTTP server type.")
 		}
 	}
 }
@@ -512,7 +439,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	project, _, err := r.oryClient.APIClient.ProjectAPI.GetProject(ctx, r.oryClient.ProjectID).Execute()
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error fetching ORY registration config",
+			"Error fetching ORY email configuration",
 			"Could not retrieve ORY email configuration: "+err.Error(),
 		)
 		return
@@ -544,7 +471,15 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	}
 
 	if serverType == "http" {
-		ApiToHttpConfig(projectConfig.Courier.HTTP, &state)
+		err := ApiToHttpConfig(projectConfig.Courier.HTTP, &state)
+
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Error reading ORY email configuration",
+				"Could not read ORY email configuration: "+err.Error(),
+			)
+			return
+		}
 	}
 
 	tflog.Debug(ctx, "Updated State", map[string]interface{}{

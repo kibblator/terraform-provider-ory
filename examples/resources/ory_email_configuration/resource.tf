@@ -49,7 +49,7 @@ resource "ory_email_configuration" "http" {
       value          = "super secret value"
     }
 
-    action_body = "aGVsbG8gd29ybGQ=" # base64 encoded string containing the jsonnet body (uses default payload from ory docs if not provided)
+    action_body = base64encode(file("./somefile.jsonnet")) # base64 encoded string containing the jsonnet body (uses default payload from ory docs if not provided)
   }
 
   smtp_headers = [
