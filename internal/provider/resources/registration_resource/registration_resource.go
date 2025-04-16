@@ -159,15 +159,16 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
-			patch = append(patch, client.JsonPatch{
-				Op:   "add",
-				Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
-				Value: orytypes.Hook{
-					Hook: "session",
-				},
-			})
-
+		if plan.EnablePostSigninReg.ValueBool() {
+			if findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
+				patch = append(patch, client.JsonPatch{
+					Op:   "add",
+					Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
+					Value: orytypes.Hook{
+						Hook: "session",
+					},
+				})
+			}
 		} else {
 			index := findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
@@ -179,13 +180,13 @@ func (r *registrationResource) Create(ctx context.Context, req resource.CreateRe
 		}
 	}
 
-	project, _ := r.oryClient.APIClient.GetProject()
-	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
+	project, _ := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch, &r.oryClient.Mutex)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Error updating ory registration config",
-			"Could not update ory registration config, unexpected error: "+err.Error(),
+			"Error creating ory registration config",
+			"Could not create ory registration config, unexpected error: "+err.Error(),
 		)
 		return
 	}
@@ -222,7 +223,7 @@ func (r *registrationResource) Read(ctx context.Context, req resource.ReadReques
 	}
 
 	// Fetch current project configuration from ORY
-	project, err := r.oryClient.APIClient.GetProject()
+	project, err := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -291,17 +292,17 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	if !plan.EnablePostSigninReg.IsNull() {
-		if plan.EnablePostSigninReg.ValueBool() && findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
-			// Add the "session" hook if it doesn't exist
-			patch = append(patch, client.JsonPatch{
-				Op:   "add",
-				Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
-				Value: orytypes.Hook{
-					Hook: "session",
-				},
-			})
+		if plan.EnablePostSigninReg.ValueBool() {
+			if findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session") == -1 {
+				patch = append(patch, client.JsonPatch{
+					Op:   "add",
+					Path: "/services/identity/config/selfservice/flows/registration/after/password/hooks/0",
+					Value: orytypes.Hook{
+						Hook: "session",
+					},
+				})
+			}
 		} else {
-			// Remove the "session" hook if it exists
 			index := findHookIndex(r.oryClient.ProjectConfig.Services.Identity.Config.SelfService.Flows.Registration.After.Password.Hooks, "session")
 			if index != -1 {
 				patch = append(patch, client.JsonPatch{
@@ -312,18 +313,8 @@ func (r *registrationResource) Update(ctx context.Context, req resource.UpdateRe
 		}
 	}
 
-	// If no changes detected, exit early
-	if len(patch) == 0 {
-		resp.Diagnostics.AddWarning(
-			"No Changes Detected",
-			"Update was triggered but no changes were detected between the plan and the current state.",
-		)
-		return
-	}
-
-	//get latest revision
-	project, _ := r.oryClient.APIClient.GetProject()
-	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
+	project, _ := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch, &r.oryClient.Mutex)
 
 	if err != nil {
 		resp.Diagnostics.AddError(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -181,11 +182,10 @@ func (p *oryProvider) Configure(ctx context.Context, req provider.ConfigureReque
 	configuration.AddDefaultHeader("Authorization", "Bearer "+workspace_api_key)
 
 	apiClient := oryclient.NewClient(host, workspace_api_key, project_id)
-	response, err := apiClient.GetProject()
+	response, err := apiClient.GetProject(&sync.Mutex{})
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error when calling `ProjectAPI.GetProject``: %v\n", err)
-		//fmt.Fprintf(os.Stderr, "Full HTTP response: %v\n", r)
 		resp.Diagnostics.AddError(
 			"Unable to get project configuration using the Ory API",
 			"An unexpected error occurred when calling GetProject on the Ory API client. "+

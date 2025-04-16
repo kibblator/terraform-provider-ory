@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -11,9 +12,23 @@ import (
 	"github.com/kibblator/terraform-provider-ory/internal/provider"
 )
 
+var (
+	cachedProvider tfprotov6.ProviderServer
+	providerMutex  sync.Mutex
+)
+
 var TestAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
 	"ory": func() (tfprotov6.ProviderServer, error) {
-		return providerserver.NewProtocol6(provider.New("dev")())(), nil
+		providerMutex.Lock()
+		defer providerMutex.Unlock()
+
+		if cachedProvider != nil {
+			return cachedProvider, nil
+		}
+
+		newProvider := providerserver.NewProtocol6(provider.New("dev")())()
+		cachedProvider = newProvider
+		return newProvider, nil
 	},
 }
 

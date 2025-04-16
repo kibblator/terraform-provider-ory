@@ -382,18 +382,8 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 			Value: httpConfig,
 		})
 	}
-
-	// If no changes detected, exit early
-	if len(patch) == 0 {
-		resp.Diagnostics.AddWarning(
-			"No Changes Detected",
-			"Update was triggered but no changes were detected between the plan and the current state.",
-		)
-		return
-	}
-
-	project, _ := r.oryClient.APIClient.GetProject()
-	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
+	project, _ := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
+	projectUpdate, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch, &r.oryClient.Mutex)
 
 	if err != nil {
 		resp.Diagnostics.AddError(
@@ -411,6 +401,10 @@ func (r *emailConfigurationResource) Create(ctx context.Context, req resource.Cr
 	} else {
 		plan.ServerType = types.StringValue(*projectUpdate.Project.Services.Identity.Config.Courier.DeliveryStrategy)
 	}
+
+	tflog.Debug(ctx, "Updated State", map[string]interface{}{
+		"state": resp.State,
+	})
 
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -432,7 +426,7 @@ func (r *emailConfigurationResource) Read(ctx context.Context, req resource.Read
 	}
 
 	// Fetch current project configuration from ORY
-	project, err := r.oryClient.APIClient.GetProject()
+	project, err := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Error fetching ORY email configuration",
@@ -568,8 +562,8 @@ func (r *emailConfigurationResource) Update(ctx context.Context, req resource.Up
 		})
 	}
 
-	project, _ := r.oryClient.APIClient.GetProject()
-	_, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch)
+	project, _ := r.oryClient.APIClient.GetProject(&r.oryClient.Mutex)
+	_, err := r.oryClient.APIClient.PatchProject(project.RevisionId, patch, &r.oryClient.Mutex)
 
 	if err != nil {
 		resp.Diagnostics.AddError(

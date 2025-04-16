@@ -8,7 +8,7 @@ import (
 	"github.com/kibblator/terraform-provider-ory/internal/provider/acctest"
 )
 
-func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
+func TestAccOryEmailConfiguration(t *testing.T) {
 	randomName := acctest.GenerateRandomResourceName()
 	resourceName := fmt.Sprintf("ory_email_configuration.%s", randomName)
 
@@ -18,7 +18,7 @@ func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
 		Steps: []resource.TestStep{
 			{
 				Config: testAccOryEmailConfiguration_SMTP(randomName),
-				Check: resource.ComposeTestCheckFunc(
+				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "server_type", "smtp"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.sender_name", "Ory"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.sender_address", "noreply@examplecompany.com"),
@@ -26,6 +26,12 @@ func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.port", "587"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.security", "starttls"),
 					resource.TestCheckResourceAttr(resourceName, "smtp_config.username", "username"),
+				),
+			},
+			{
+				Config: testAccOryEmailConfiguration_Default(randomName),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr(resourceName, "server_type", "default"),
 				),
 			},
 			{
@@ -38,19 +44,13 @@ func TestAccOryEmailConfiguration_SMTP(t *testing.T) {
 			},
 			{
 				Config: testAccOryEmailConfiguration_HTTP(randomName),
-				Check: resource.ComposeTestCheckFunc(
+				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr(resourceName, "server_type", "http"),
 					resource.TestCheckResourceAttr(resourceName, "http_config.url", "https://ory.sh"),
 					resource.TestCheckResourceAttr(resourceName, "http_config.request_method", "POST"),
 					resource.TestCheckResourceAttr(resourceName, "http_config.authentication_type", "basic_auth"),
 					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.username", "username"),
 					resource.TestCheckResourceAttr(resourceName, "http_config.basic_auth.password", "password"),
-				),
-			},
-			{
-				Config: testAccOryEmailConfiguration_Default(randomName),
-				Check: resource.ComposeTestCheckFunc(
-					resource.TestCheckResourceAttr(resourceName, "server_type", "default"),
 				),
 			},
 		},

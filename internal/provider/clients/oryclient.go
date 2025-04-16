@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	orytypes "github.com/kibblator/terraform-provider-ory/internal/provider/types"
 	"github.com/ory/client-go"
@@ -22,6 +23,7 @@ type OryClient struct {
 	APIClient     *Client
 	ProjectConfig *orytypes.Project
 	ProjectID     string
+	Mutex         sync.Mutex
 }
 
 func NewClient(baseUrl, apiKey, projectID string) *Client {
@@ -33,7 +35,10 @@ func NewClient(baseUrl, apiKey, projectID string) *Client {
 	}
 }
 
-func (c *Client) GetProject() (*orytypes.Project, error) {
+func (c *Client) GetProject(m *sync.Mutex) (*orytypes.Project, error) {
+	m.Lock()
+	defer m.Unlock()
+
 	url := fmt.Sprintf("%s/projects/%s", c.BaseURL, c.ProjectID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -66,7 +71,10 @@ func (c *Client) GetProject() (*orytypes.Project, error) {
 	return &config, nil
 }
 
-func (c *Client) PatchProject(revisionID string, patchData []client.JsonPatch) (*orytypes.ProjectConfig, error) {
+func (c *Client) PatchProject(revisionID string, patchData []client.JsonPatch, m *sync.Mutex) (*orytypes.ProjectConfig, error) {
+	m.Lock()
+	defer m.Unlock()
+
 	url := fmt.Sprintf("%s/projects/%s/revision/%s", c.BaseURL, c.ProjectID, revisionID)
 	data, err := json.Marshal(patchData)
 	if err != nil {

@@ -43,4 +43,4 @@ jobs:
         run: terraform init
 
       - name: Run Acceptance Tests
-        run: go test -v ./... -run TestAcc
+        run: ./scripts/run_acceptance_tests_sequentially.sh
