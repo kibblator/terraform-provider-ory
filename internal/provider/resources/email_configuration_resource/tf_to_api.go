@@ -10,8 +10,10 @@ import (
 func HttpConfigToApi(tfConfig emailConfigurationResourceModel, httpConfig *orytypes.HTTP) {
 	headersMap := make(map[string]string)
 
-	for _, header := range *tfConfig.SMTPHeaders {
-		headersMap[header.Key.ValueString()] = header.Value.ValueString()
+	if tfConfig.SMTPHeaders != nil {
+		for _, header := range *tfConfig.SMTPHeaders {
+			headersMap[header.Key.ValueString()] = header.Value.ValueString()
+		}
 	}
 
 	authenticationType := tfConfig.HTTPConfig.AuthenticationType.ValueString()
@@ -48,8 +50,10 @@ func HttpConfigToApi(tfConfig emailConfigurationResourceModel, httpConfig *oryty
 func SmtpConfigToApi(tfConfig emailConfigurationResourceModel, smtpConfig *orytypes.SMTP) {
 	headersMap := make(map[string]string)
 
-	for _, header := range *tfConfig.SMTPHeaders {
-		headersMap[header.Key.ValueString()] = header.Value.ValueString()
+	if tfConfig.SMTPHeaders != nil {
+		for _, header := range *tfConfig.SMTPHeaders {
+			headersMap[header.Key.ValueString()] = header.Value.ValueString()
+		}
 	}
 
 	smtpConfig.ConnectionUri = buildSMTPURL(tfConfig.SMTPConfig.Username.ValueString(), tfConfig.SMTPConfig.Password.ValueString(),
